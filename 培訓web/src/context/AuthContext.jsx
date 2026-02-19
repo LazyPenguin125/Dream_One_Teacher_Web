@@ -9,19 +9,30 @@ export const AuthProvider = ({ children }) => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // Check active sessions and sets the user
-        const getSession = async () => {
-            const { data: { session } } = await supabase.auth.getSession();
-            setUser(session?.user ?? null);
-            if (session?.user) {
-                await fetchProfile(session.user.id);
-            }
+        // 超時保護：最多等 6 秒，否則強制結束 loading
+        const timeoutId = setTimeout(() => {
+            console.warn('Auth loading timeout — forcing loading=false');
             setLoading(false);
+        }, 6000);
+
+        const getSession = async () => {
+            try {
+                const { data: { session }, error } = await supabase.auth.getSession();
+                if (error) console.warn('getSession error:', error.message);
+                setUser(session?.user ?? null);
+                if (session?.user) {
+                    await fetchProfile(session.user.id);
+                }
+            } catch (err) {
+                console.error('getSession threw:', err);
+            } finally {
+                clearTimeout(timeoutId);
+                setLoading(false);
+            }
         };
 
         getSession();
 
-        // Listen for changes on auth state (logged in, signed out, etc.)
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
             setUser(session?.user ?? null);
             if (session?.user) {
@@ -29,11 +40,16 @@ export const AuthProvider = ({ children }) => {
             } else {
                 setProfile(null);
             }
+            clearTimeout(timeoutId);
             setLoading(false);
         });
 
-        return () => subscription.unsubscribe();
+        return () => {
+            clearTimeout(timeoutId);
+            subscription.unsubscribe();
+        };
     }, []);
+
 
     const fetchProfile = async (userId) => {
         if (!userId) {

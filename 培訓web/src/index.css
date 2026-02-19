@@ -7,3 +7,24 @@
     @apply bg-slate-50 text-slate-900;
   }
 }
+
+/* Quill editor overrides */
+.quill-wrapper .ql-container {
+  min-height: 380px;
+  font-size: 15px;
+  font-family: inherit;
+  border-bottom-left-radius: 12px;
+  border-bottom-right-radius: 12px;
+  border-color: #e2e8f0;
+}
+.quill-wrapper .ql-toolbar {
+  border-top-left-radius: 12px;
+  border-top-right-radius: 12px;
+  border-color: #e2e8f0;
+  background: #f8fafc;
+}
+.quill-wrapper .ql-editor {
+  min-height: 380px;
+  line-height: 1.8;
+}
+.quill-wrapper .ql-editor p { margin-bottom: 0.5em; }

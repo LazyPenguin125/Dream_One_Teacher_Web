@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import Layout from './components/Layout';
 import CourseList from './pages/CourseList';
 import LessonView from './pages/LessonView';
+import LessonDetail from './pages/LessonDetail';
 import AdminDashboard from './pages/admin/Dashboard';
 import CMSManager from './pages/admin/CMSManager';
 import AssignmentReview from './pages/admin/AssignmentReview';
@@ -36,6 +37,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <Layout><LessonView /></Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/courses/:courseId/lessons/:lessonId"
+            element={
+              <ProtectedRoute>
+                <Layout><LessonDetail /></Layout>
               </ProtectedRoute>
             }
           />

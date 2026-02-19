@@ -12,7 +12,19 @@ const Layout = ({ children }) => {
             <header className="bg-white border-b border-slate-200">
                 <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
                     <Link to="/" className="flex items-center gap-2 font-bold text-xl text-blue-600">
-                        <BookOpen className="w-6 h-6" />
+                        <div
+                            role="img"
+                            aria-label="夢想一號 Logo"
+                            style={{
+                                width: 40,
+                                height: 40,
+                                flexShrink: 0,
+                                backgroundImage: 'url(/logo.png)',
+                                backgroundSize: '120% auto',
+                                backgroundPosition: 'center 5%',
+                                backgroundRepeat: 'no-repeat',
+                            }}
+                        />
                         教師培訓平台
                     </Link>
 
