@@ -1,37 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { supabase } from '../lib/supabaseClient';
 import {
     BookOpen, Target, Heart, Sparkles, ChevronRight,
     Megaphone, Pin, Calendar, Users, Star, ArrowRight
 } from 'lucide-react';
-
-const ANNOUNCEMENTS = [
-    {
-        id: 1,
-        pinned: true,
-        title: '歡迎加入夢想一號教師培訓平台',
-        content: '各位老師好！本平台將提供完整的線上培訓資源，請依序完成各課程章節的學習，並於每章節完成後繳交作業。',
-        date: '2026-02-19',
-        tag: '重要公告',
-    },
-    {
-        id: 2,
-        pinned: false,
-        title: '新課程上線：魔術方塊教學基礎',
-        content: '全新的魔術方塊教學基礎課程已上線，包含教學心法、課堂管理與互動技巧等單元，歡迎各位老師前往學習。',
-        date: '2026-02-18',
-        tag: '課程更新',
-    },
-    {
-        id: 3,
-        pinned: false,
-        title: '本月作業繳交截止提醒',
-        content: '請尚未繳交本月作業的老師於月底前完成繳交，管理員將於下月初統一進行審核與回饋。',
-        date: '2026-02-15',
-        tag: '提醒',
-    },
-];
 
 const VISION_ITEMS = [
     {
@@ -72,6 +46,21 @@ const TEAM_PHOTOS = [
 const HomePage = () => {
     const { user } = useAuth();
     const [activeTab, setActiveTab] = useState('real');
+    const [announcements, setAnnouncements] = useState([]);
+
+    useEffect(() => {
+        const fetchAnnouncements = async () => {
+            const { data } = await supabase
+                .from('announcements')
+                .select('*')
+                .eq('published', true)
+                .order('pinned', { ascending: false })
+                .order('created_at', { ascending: false })
+                .limit(6);
+            setAnnouncements(data || []);
+        };
+        fetchAnnouncements();
+    }, []);
 
     return (
         <div className="min-h-screen">
@@ -165,45 +154,50 @@ const HomePage = () => {
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        {ANNOUNCEMENTS.map((a) => (
-                            <div
-                                key={a.id}
-                                className={`relative bg-white rounded-2xl border p-6 transition-all hover:shadow-lg hover:-translate-y-1 ${
-                                    a.pinned
-                                        ? 'border-red-200 shadow-md shadow-red-50 ring-1 ring-red-100'
-                                        : 'border-slate-150 shadow-sm'
-                                }`}
-                            >
-                                {a.pinned && (
-                                    <div className="absolute -top-3 -right-2">
-                                        <div className="bg-red-500 text-white p-1.5 rounded-full shadow-lg shadow-red-200">
-                                            <Pin className="w-3.5 h-3.5" />
-                                        </div>
-                                    </div>
-                                )}
-
-                                <div className="flex items-center gap-2 mb-3">
-                                    <span className={`text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider ${
+                    {announcements.length > 0 ? (
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            {announcements.map((a) => (
+                                <div
+                                    key={a.id}
+                                    className={`relative bg-white rounded-2xl border p-6 transition-all hover:shadow-lg hover:-translate-y-1 ${
                                         a.pinned
-                                            ? 'bg-red-50 text-red-600'
-                                            : a.tag === '課程更新'
-                                                ? 'bg-blue-50 text-blue-600'
-                                                : 'bg-amber-50 text-amber-600'
-                                    }`}>
-                                        {a.tag}
-                                    </span>
-                                    <span className="flex items-center gap-1 text-[11px] text-slate-400 font-medium">
-                                        <Calendar className="w-3 h-3" />
-                                        {a.date}
-                                    </span>
-                                </div>
+                                            ? 'border-red-200 shadow-md shadow-red-50 ring-1 ring-red-100'
+                                            : 'border-slate-150 shadow-sm'
+                                    }`}
+                                >
+                                    {a.pinned && (
+                                        <div className="absolute -top-3 -right-2">
+                                            <div className="bg-red-500 text-white p-1.5 rounded-full shadow-lg shadow-red-200">
+                                                <Pin className="w-3.5 h-3.5" />
+                                            </div>
+                                        </div>
+                                    )}
 
-                                <h3 className="font-bold text-slate-900 mb-2 leading-snug">{a.title}</h3>
-                                <p className="text-sm text-slate-500 leading-relaxed">{a.content}</p>
-                            </div>
-                        ))}
-                    </div>
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <span className={`text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider ${
+                                            a.tag === '重要公告' ? 'bg-red-50 text-red-600'
+                                                : a.tag === '課程更新' ? 'bg-blue-50 text-blue-600'
+                                                    : a.tag === '提醒' ? 'bg-amber-50 text-amber-600'
+                                                        : 'bg-slate-100 text-slate-500'
+                                        }`}>
+                                            {a.tag}
+                                        </span>
+                                        <span className="flex items-center gap-1 text-[11px] text-slate-400 font-medium">
+                                            <Calendar className="w-3 h-3" />
+                                            {new Date(a.created_at).toLocaleDateString()}
+                                        </span>
+                                    </div>
+
+                                    <h3 className="font-bold text-slate-900 mb-2 leading-snug">{a.title}</h3>
+                                    <p className="text-sm text-slate-500 leading-relaxed">{a.content}</p>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="py-12 text-center bg-white rounded-2xl border border-slate-100">
+                            <p className="text-slate-400">目前沒有公告</p>
+                        </div>
+                    )}
                 </div>
             </section>
 

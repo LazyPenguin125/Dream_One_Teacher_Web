@@ -8,6 +8,9 @@ import LessonDetail from './pages/LessonDetail';
 import AdminDashboard from './pages/admin/Dashboard';
 import CMSManager from './pages/admin/CMSManager';
 import AssignmentReview from './pages/admin/AssignmentReview';
+import TeacherManager from './pages/admin/TeacherManager';
+import ProgressOverview from './pages/admin/ProgressOverview';
+import AnnouncementManager from './pages/admin/AnnouncementManager';
 
 const ProtectedRoute = ({ children, adminOnly = false }) => {
   const { user, profile, loading } = useAuth();
@@ -70,6 +73,30 @@ function App() {
             element={
               <ProtectedRoute adminOnly={true}>
                 <Layout><AssignmentReview /></Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/teachers"
+            element={
+              <ProtectedRoute adminOnly={true}>
+                <Layout><TeacherManager /></Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/progress"
+            element={
+              <ProtectedRoute adminOnly={true}>
+                <Layout><ProgressOverview /></Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/announcements"
+            element={
+              <ProtectedRoute adminOnly={true}>
+                <Layout><AnnouncementManager /></Layout>
               </ProtectedRoute>
             }
           />

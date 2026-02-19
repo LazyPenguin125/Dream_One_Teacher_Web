@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabaseClient';
-import { Plus, Edit2, Trash2, Eye, EyeOff, LayoutGrid, Users, ClipboardCheck } from 'lucide-react';
+import { Plus, Edit2, Trash2, Eye, EyeOff, LayoutGrid, Users, ClipboardCheck, UserCog, BarChart3, Megaphone, ChevronRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 const AdminDashboard = () => {
@@ -101,6 +101,40 @@ const AdminDashboard = () => {
                         <div className="text-sm font-medium text-slate-400">待審核作業</div>
                     </div>
                 </div>
+            </div>
+
+            {/* Quick nav */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-12">
+                <Link to="/admin/teachers" className="group bg-white p-5 rounded-2xl border border-slate-100 shadow-sm hover:border-blue-300 hover:shadow-md transition-all flex items-center gap-4">
+                    <div className="w-11 h-11 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                        <UserCog className="w-5 h-5" />
+                    </div>
+                    <div className="flex-1">
+                        <div className="font-bold text-slate-900">講師名單管理</div>
+                        <div className="text-xs text-slate-400">新增、管理講師與權限設定</div>
+                    </div>
+                    <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-blue-400 transition-colors" />
+                </Link>
+                <Link to="/admin/progress" className="group bg-white p-5 rounded-2xl border border-slate-100 shadow-sm hover:border-emerald-300 hover:shadow-md transition-all flex items-center gap-4">
+                    <div className="w-11 h-11 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                        <BarChart3 className="w-5 h-5" />
+                    </div>
+                    <div className="flex-1">
+                        <div className="font-bold text-slate-900">培訓進度總覽</div>
+                        <div className="text-xs text-slate-400">檢視所有講師學習進度與狀態</div>
+                    </div>
+                    <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-emerald-400 transition-colors" />
+                </Link>
+                <Link to="/admin/announcements" className="group bg-white p-5 rounded-2xl border border-slate-100 shadow-sm hover:border-red-300 hover:shadow-md transition-all flex items-center gap-4">
+                    <div className="w-11 h-11 bg-red-50 text-red-500 rounded-xl flex items-center justify-center group-hover:bg-red-500 group-hover:text-white transition-colors">
+                        <Megaphone className="w-5 h-5" />
+                    </div>
+                    <div className="flex-1">
+                        <div className="font-bold text-slate-900">佈告欄管理</div>
+                        <div className="text-xs text-slate-400">新增、編輯首頁公告內容</div>
+                    </div>
+                    <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-red-400 transition-colors" />
+                </Link>
             </div>
 
             {/* Course List Table */}

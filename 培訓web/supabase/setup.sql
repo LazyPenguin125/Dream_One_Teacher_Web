@@ -156,4 +156,95 @@ create policy "Admins can do everything on assignments" on assignments for all u
   exists (select 1 from public.users where id = auth.uid() and role = 'admin')
 );
 
+-- ═══════════════════════════════════════════════════════════════════
+-- 新增功能：講師管理 / 培訓進度 / 佈告欄
+-- ═══════════════════════════════════════════════════════════════════
+
+-- 8. users 表新增欄位
+alter table users add column if not exists mentor_name text;
+
+-- 9. teacher_invites（預先建檔，管理員邀請尚未註冊的講師）
+create table teacher_invites (
+  id uuid default gen_random_uuid() primary key,
+  name text not null,
+  email text not null unique,
+  role text check (role in ('teacher', 'admin')) default 'teacher',
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+alter table teacher_invites enable row level security;
+
+create policy "Admins can do everything on teacher_invites" on teacher_invites for all using (
+  exists (select 1 from public.users where id = auth.uid() and role = 'admin')
+);
+
+-- 10. course_training_status（每位講師在每門課程的培訓狀態）
+create table course_training_status (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users not null,
+  course_id uuid references courses(id) on delete cascade not null,
+  status text check (status in ('training', 'completed', 'exempt')) default 'training',
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  unique (user_id, course_id)
+);
+
+alter table course_training_status enable row level security;
+
+create policy "Users can view own training status" on course_training_status for select using (
+  auth.uid() = user_id
+);
+create policy "Admins can do everything on course_training_status" on course_training_status for all using (
+  exists (select 1 from public.users where id = auth.uid() and role = 'admin')
+);
+
+-- 11. announcements（佈告欄）
+create table announcements (
+  id uuid default gen_random_uuid() primary key,
+  title text not null,
+  content text not null,
+  tag text default '一般公告',
+  pinned boolean default false,
+  published boolean default true,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+alter table announcements enable row level security;
+
+create policy "Everyone can view published announcements" on announcements for select using (
+  published = true
+);
+create policy "Admins can do everything on announcements" on announcements for all using (
+  exists (select 1 from public.users where id = auth.uid() and role = 'admin')
+);
+
+-- 12. 更新 handle_new_user trigger：支援預先建檔的講師自動配對
+create or replace function public.handle_new_user()
+returns trigger as $$
+declare
+  invite_record record;
+begin
+  select * into invite_record from public.teacher_invites where email = new.email;
+
+  if invite_record is not null then
+    insert into public.users (id, name, email, role)
+    values (
+      new.id,
+      coalesce(invite_record.name, new.raw_user_meta_data->>'full_name'),
+      new.email,
+      invite_record.role
+    )
+    on conflict (id) do nothing;
+
+    delete from public.teacher_invites where email = new.email;
+  else
+    insert into public.users (id, name, email, role)
+    values (new.id, new.raw_user_meta_data->>'full_name', new.email, 'teacher')
+    on conflict (id) do nothing;
+  end if;
+
+  return new;
+end;
+$$ language plpgsql security definer;
+
 -- Note: You should update the roles manually in the users table for admins.
