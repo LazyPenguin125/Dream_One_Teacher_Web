@@ -19,6 +19,31 @@ const QUILL_MODULES = {
     ],
 };
 
+// ─── YouTube URL → embed URL 轉換 ──────────────────────────────────────────
+const toEmbedUrl = (url) => {
+    if (!url) return '';
+    try {
+        const u = new URL(url);
+        // 已經是 embed 格式
+        if (u.pathname.startsWith('/embed/')) return url;
+        // https://www.youtube.com/watch?v=VIDEO_ID
+        if ((u.hostname === 'www.youtube.com' || u.hostname === 'youtube.com') && u.searchParams.get('v')) {
+            return `https://www.youtube.com/embed/${u.searchParams.get('v')}`;
+        }
+        // https://youtu.be/VIDEO_ID
+        if (u.hostname === 'youtu.be' && u.pathname.length > 1) {
+            return `https://www.youtube.com/embed${u.pathname}`;
+        }
+        // https://www.youtube.com/shorts/VIDEO_ID
+        if (u.pathname.startsWith('/shorts/')) {
+            return `https://www.youtube.com/embed/${u.pathname.replace('/shorts/', '')}`;
+        }
+    } catch {
+        // 不是合法 URL，原封回傳
+    }
+    return url;
+};
+
 // ─── Main Component ────────────────────────────────────────────────────────
 const EditorComponent = ({ lessonId, onBack }) => {
     const [lessonTitle, setLessonTitle] = useState('');
@@ -78,31 +103,74 @@ const EditorComponent = ({ lessonId, onBack }) => {
     // ── Save all blocks ──
     const handleSaveAll = async () => {
         setSaving(true);
+        console.log('=== 開始儲存 ===', { totalBlocks: blocks.length });
+
+        // 15 秒逾時保護
+        const timeout = (ms) => new Promise((_, reject) =>
+            setTimeout(() => reject(new Error(`操作逾時（超過 ${ms / 1000} 秒）`)), ms)
+        );
+
         try {
-            for (const block of blocks) {
+            const newBlocks = blocks.filter(b => b.isNew);
+            const existingBlocks = blocks.filter(b => !b.isNew);
+            console.log(`新區塊: ${newBlocks.length}, 已存在區塊: ${existingBlocks.length}`);
+
+            let insertedMap = {};
+
+            // ── Insert new blocks one by one (to avoid batch issues) ──
+            for (const b of newBlocks) {
                 const payload = {
                     lesson_id: lessonId,
-                    type: block.type === 'text' ? 'article' : block.type,
-                    title: block.title || '',
-                    body: block.body || '',
-                    video_url: block.video_url || null,
-                    order: block.order,
+                    type: b.type === 'text' ? 'article' : b.type,
+                    title: b.title || '',
+                    body: b.body || '',
+                    video_url: b.video_url || null,
+                    order: b.order,
                 };
+                console.log('插入區塊:', b.id, payload.type, payload.title);
 
-                if (block.isNew) {
-                    const { data, error } = await supabase.from('contents').insert(payload).select().single();
-                    if (error) throw error;
-                    // Update block in state with real ID
-                    setBlocks(prev => prev.map(b => b.id === block.id ? { ...data, isNew: false } : b));
-                } else {
-                    const { error } = await supabase.from('contents').update(payload).eq('id', block.id);
-                    if (error) throw error;
-                }
+                const { data, error } = await Promise.race([
+                    supabase.from('contents').insert(payload).select().single(),
+                    timeout(15000),
+                ]);
+
+                console.log('插入結果:', { data, error });
+                if (error) throw error;
+                if (data) insertedMap[b.id] = data;
             }
+
+            // ── Update existing blocks one by one ──
+            for (const b of existingBlocks) {
+                const payload = {
+                    lesson_id: lessonId,
+                    type: b.type === 'text' ? 'article' : b.type,
+                    title: b.title || '',
+                    body: b.body || '',
+                    video_url: b.video_url || null,
+                    order: b.order,
+                };
+                console.log('更新區塊:', b.id, payload.type, payload.title);
+
+                const { error } = await Promise.race([
+                    supabase.from('contents').update(payload).eq('id', b.id),
+                    timeout(15000),
+                ]);
+
+                console.log('更新結果:', { error });
+                if (error) throw error;
+            }
+
+            // ── Update state once ──
+            setBlocks(prev => prev.map(b => {
+                if (insertedMap[b.id]) return { ...insertedMap[b.id], isNew: false };
+                return b;
+            }));
+
+            console.log('=== 儲存完成 ===');
             alert('所有內容已儲存成功！');
         } catch (err) {
-            console.error('save error:', err);
-            alert('儲存失敗：' + err.message);
+            console.error('=== 儲存失敗 ===', err);
+            alert('儲存失敗：' + (err?.message || JSON.stringify(err)));
         } finally {
             setSaving(false);
         }
@@ -225,14 +293,25 @@ const EditorComponent = ({ lessonId, onBack }) => {
                                                 type="url"
                                                 value={block.video_url || ''}
                                                 onChange={(e) => updateBlock(block.id, 'video_url', e.target.value)}
-                                                placeholder="貼上 YouTube 嵌入連結 (https://www.youtube.com/embed/...)"
+                                                onBlur={(e) => {
+                                                    const converted = toEmbedUrl(e.target.value);
+                                                    if (converted !== e.target.value) updateBlock(block.id, 'video_url', converted);
+                                                }}
+                                                onPaste={(e) => {
+                                                    setTimeout(() => {
+                                                        const val = e.target.value;
+                                                        const converted = toEmbedUrl(val);
+                                                        if (converted !== val) updateBlock(block.id, 'video_url', converted);
+                                                    }, 0);
+                                                }}
+                                                placeholder="貼上 YouTube 連結（任何格式皆可）"
                                                 className="flex-1 bg-transparent border-none outline-none text-sm font-mono focus:ring-0"
                                             />
                                         </div>
                                         {block.video_url ? (
                                             <div className="aspect-video bg-slate-900 rounded-2xl overflow-hidden shadow-inner ring-1 ring-slate-200">
                                                 <iframe
-                                                    src={block.video_url}
+                                                    src={toEmbedUrl(block.video_url)}
                                                     title={block.title}
                                                     className="w-full h-full"
                                                     allowFullScreen

@@ -3,6 +3,31 @@ import { useParams, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { ChevronLeft, ChevronRight, Play, FileText, CheckCircle, Circle } from 'lucide-react';
 
+// Strip HTML tags and return plain text preview
+const stripHtml = (html) => {
+    if (!html) return '';
+    return html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+};
+
+// YouTube URL → embed URL 轉換
+const toEmbedUrl = (url) => {
+    if (!url) return '';
+    try {
+        const u = new URL(url);
+        if (u.pathname.startsWith('/embed/')) return url;
+        if ((u.hostname === 'www.youtube.com' || u.hostname === 'youtube.com') && u.searchParams.get('v')) {
+            return `https://www.youtube.com/embed/${u.searchParams.get('v')}`;
+        }
+        if (u.hostname === 'youtu.be' && u.pathname.length > 1) {
+            return `https://www.youtube.com/embed${u.pathname}`;
+        }
+        if (u.pathname.startsWith('/shorts/')) {
+            return `https://www.youtube.com/embed/${u.pathname.replace('/shorts/', '')}`;
+        }
+    } catch { /* ignore */ }
+    return url;
+};
+
 const LessonDetail = () => {
     const { courseId, lessonId } = useParams();
     const [course, setCourse] = useState(null);
@@ -142,8 +167,8 @@ const LessonDetail = () => {
                 <button
                     onClick={toggleComplete}
                     className={`shrink-0 flex items-center gap-2.5 px-5 py-2.5 rounded-2xl text-sm font-black transition-all shadow-sm ${isCompleted
-                            ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                            : 'bg-white border border-slate-200 text-slate-700 hover:border-blue-300 hover:text-blue-600'
+                        ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                        : 'bg-white border border-slate-200 text-slate-700 hover:border-blue-300 hover:text-blue-600'
                         }`}
                 >
                     {isCompleted ? <CheckCircle className="w-4 h-4" /> : <Circle className="w-4 h-4" />}
@@ -168,7 +193,7 @@ const LessonDetail = () => {
                             {item.type === 'video' ? (
                                 <div className="aspect-video bg-slate-900 rounded-2xl overflow-hidden shadow-2xl ring-1 ring-white/10">
                                     <iframe
-                                        src={item.video_url}
+                                        src={toEmbedUrl(item.video_url)}
                                         title={item.title}
                                         className="w-full h-full"
                                         allowFullScreen
