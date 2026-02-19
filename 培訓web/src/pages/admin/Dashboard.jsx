@@ -42,6 +42,22 @@ const AdminDashboard = () => {
         }
     };
 
+    const deleteCourse = async (course) => {
+        if (!window.confirm(`確定要刪除課程「${course.title}」嗎？\n此操作將同時刪除所有相關章節與內容，無法復原。`)) return;
+
+        const { error } = await supabase
+            .from('courses')
+            .delete()
+            .eq('id', course.id);
+
+        if (error) {
+            alert('刪除失敗：' + error.message);
+            return;
+        }
+        setCourses(courses.filter(c => c.id !== course.id));
+        setStats(prev => ({ ...prev, courses: prev.courses - 1 }));
+    };
+
     if (loading) return <div className="p-12 text-center text-slate-500">載入中...</div>;
 
     return (
@@ -132,7 +148,11 @@ const AdminDashboard = () => {
                                         <Link to={`/admin/cms/${course.id}`} className="p-2 text-slate-400 hover:text-blue-600 transition-colors">
                                             <Edit2 className="w-4 h-4" />
                                         </Link>
-                                        <button className="p-2 text-slate-400 hover:text-red-500 transition-colors">
+                                        <button
+                                            onClick={() => deleteCourse(course)}
+                                            className="p-2 text-slate-400 hover:text-red-500 transition-colors"
+                                            title="刪除課程"
+                                        >
                                             <Trash2 className="w-4 h-4" />
                                         </button>
                                     </div>

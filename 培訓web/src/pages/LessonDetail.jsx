@@ -109,7 +109,13 @@ const LessonDetail = () => {
                 completed: newStatus,
                 updated_at: new Date().toISOString()
             }, { onConflict: 'user_id,lesson_id' });
-        if (!error) setProgress({ ...progress, [lessonId]: newStatus });
+
+        if (error) {
+            console.error('進度更新失敗:', error);
+            alert('進度更新失敗：' + error.message);
+            return;
+        }
+        setProgress({ ...progress, [lessonId]: newStatus });
     };
 
     const submitAssignment = async () => {
@@ -117,14 +123,17 @@ const LessonDetail = () => {
         setIsSubmitting(true);
         const { error } = await supabase
             .from('assignments')
-            .insert([{
+            .insert({
                 user_id: currentUser.id,
                 lesson_id: lesson.id,
                 type: assignment.type,
                 content: assignment.content,
-                created_at: new Date().toISOString()
-            }]);
-        if (!error) {
+            });
+
+        if (error) {
+            console.error('作業繳交失敗:', error);
+            alert('作業繳交失敗：' + error.message);
+        } else {
             alert('作業已成功繳交！');
             setAssignment({ content: '', type: 'text' });
         }

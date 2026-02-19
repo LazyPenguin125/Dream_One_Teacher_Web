@@ -131,4 +131,29 @@ create policy "Everyone can view contents" on contents for select using (
   true
 );
 
+-- Progress Table: 教師可管理自己的進度，管理員可檢視所有進度
+create policy "Users can view own progress" on progress for select using (
+  auth.uid() = user_id
+);
+create policy "Users can insert own progress" on progress for insert with check (
+  auth.uid() = user_id
+);
+create policy "Users can update own progress" on progress for update using (
+  auth.uid() = user_id
+);
+create policy "Admins can do everything on progress" on progress for all using (
+  exists (select 1 from public.users where id = auth.uid() and role = 'admin')
+);
+
+-- Assignments Table: 教師可繳交與查看自己的作業，管理員可管理所有作業
+create policy "Users can view own assignments" on assignments for select using (
+  auth.uid() = user_id
+);
+create policy "Users can insert own assignments" on assignments for insert with check (
+  auth.uid() = user_id
+);
+create policy "Admins can do everything on assignments" on assignments for all using (
+  exists (select 1 from public.users where id = auth.uid() and role = 'admin')
+);
+
 -- Note: You should update the roles manually in the users table for admins.

@@ -74,13 +74,38 @@ const CMSManager = () => {
             return;
         }
         const newOrder = lessons.length > 0 ? Math.max(...lessons.map(l => l.order)) + 1 : 0;
-        const { data, error } = await supabase
-            .from('lessons')
-            .insert([{ course_id: courseId, title: '新章節', order: newOrder }])
-            .select()
-            .single();
 
-        if (!error) setLessons([...lessons, data]);
+        const { error } = await supabase
+            .from('lessons')
+            .insert({ course_id: courseId, title: '新章節', order: newOrder });
+
+        if (error) {
+            alert('新增章節失敗：' + error.message);
+            return;
+        }
+
+        const { data: refreshed } = await supabase
+            .from('lessons')
+            .select('*')
+            .eq('course_id', courseId)
+            .order('order', { ascending: true });
+
+        setLessons(refreshed || []);
+    };
+
+    const deleteLesson = async (lesson) => {
+        if (!window.confirm(`確定要刪除章節「${lesson.title}」嗎？\n此操作將同時刪除該章節下的所有內容，無法復原。`)) return;
+
+        const { error } = await supabase
+            .from('lessons')
+            .delete()
+            .eq('id', lesson.id);
+
+        if (error) {
+            alert('刪除失敗：' + error.message);
+            return;
+        }
+        setLessons(lessons.filter(l => l.id !== lesson.id));
     };
 
     if (loading) return <div className="p-12 text-center text-slate-500">載入中...</div>;
@@ -185,7 +210,11 @@ const CMSManager = () => {
                                         >
                                             <Edit3 className="w-3 h-3" /> 編輯內容
                                         </button>
-                                        <button className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                                        <button
+                                            onClick={() => deleteLesson(lesson)}
+                                            className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                            title="刪除章節"
+                                        >
                                             <Trash2 className="w-4 h-4" />
                                         </button>
                                     </div>

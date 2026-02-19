@@ -103,21 +103,11 @@ const EditorComponent = ({ lessonId, onBack }) => {
     // ── Save all blocks ──
     const handleSaveAll = async () => {
         setSaving(true);
-        console.log('=== 開始儲存 ===', { totalBlocks: blocks.length });
-
-        // 15 秒逾時保護
-        const timeout = (ms) => new Promise((_, reject) =>
-            setTimeout(() => reject(new Error(`操作逾時（超過 ${ms / 1000} 秒）`)), ms)
-        );
 
         try {
             const newBlocks = blocks.filter(b => b.isNew);
             const existingBlocks = blocks.filter(b => !b.isNew);
-            console.log(`新區塊: ${newBlocks.length}, 已存在區塊: ${existingBlocks.length}`);
 
-            let insertedMap = {};
-
-            // ── Insert new blocks one by one (to avoid batch issues) ──
             for (const b of newBlocks) {
                 const payload = {
                     lesson_id: lessonId,
@@ -126,50 +116,44 @@ const EditorComponent = ({ lessonId, onBack }) => {
                     body: b.body || '',
                     video_url: b.video_url || null,
                     order: b.order,
+                    status: 'draft',
                 };
-                console.log('插入區塊:', b.id, payload.type, payload.title);
 
-                const { data, error } = await Promise.race([
-                    supabase.from('contents').insert(payload).select().single(),
-                    timeout(15000),
-                ]);
+                const { error } = await supabase
+                    .from('contents')
+                    .insert(payload);
 
-                console.log('插入結果:', { data, error });
                 if (error) throw error;
-                if (data) insertedMap[b.id] = data;
             }
 
-            // ── Update existing blocks one by one ──
             for (const b of existingBlocks) {
                 const payload = {
-                    lesson_id: lessonId,
                     type: b.type === 'text' ? 'article' : b.type,
                     title: b.title || '',
                     body: b.body || '',
                     video_url: b.video_url || null,
                     order: b.order,
                 };
-                console.log('更新區塊:', b.id, payload.type, payload.title);
 
-                const { error } = await Promise.race([
-                    supabase.from('contents').update(payload).eq('id', b.id),
-                    timeout(15000),
-                ]);
+                const { error } = await supabase
+                    .from('contents')
+                    .update(payload)
+                    .eq('id', b.id);
 
-                console.log('更新結果:', { error });
                 if (error) throw error;
             }
 
-            // ── Update state once ──
-            setBlocks(prev => prev.map(b => {
-                if (insertedMap[b.id]) return { ...insertedMap[b.id], isNew: false };
-                return b;
-            }));
+            // 儲存成功後重新從資料庫載入最新資料
+            const { data: refreshed } = await supabase
+                .from('contents')
+                .select('*')
+                .eq('lesson_id', lessonId)
+                .order('order', { ascending: true });
 
-            console.log('=== 儲存完成 ===');
+            setBlocks(refreshed || []);
             alert('所有內容已儲存成功！');
         } catch (err) {
-            console.error('=== 儲存失敗 ===', err);
+            console.error('儲存失敗:', err);
             alert('儲存失敗：' + (err?.message || JSON.stringify(err)));
         } finally {
             setSaving(false);
