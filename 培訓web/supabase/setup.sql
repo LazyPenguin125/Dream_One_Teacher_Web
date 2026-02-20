@@ -5,7 +5,7 @@ create table users (
   id uuid references auth.users not null primary key,
   name text,
   email text,
-  role text check (role in ('teacher', 'admin')) default 'teacher',
+  role text check (role in ('pending', 'teacher', 'admin')) default 'pending',
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
@@ -82,7 +82,7 @@ create or replace function public.handle_new_user()
 returns trigger as $$
 begin
   insert into public.users (id, name, email, role)
-  values (new.id, new.raw_user_meta_data->>'full_name', new.email, 'teacher')
+  values (new.id, new.raw_user_meta_data->>'full_name', new.email, 'pending')
   on conflict (id) do nothing;
   return new;
 end;
@@ -107,28 +107,30 @@ create policy "Admins can update all profiles" on public.users for update using 
   exists (select 1 from public.users where id = auth.uid() and role = 'admin')
 );
 
--- Courses Table: 管理員可做任何事，教師可讀取已發佈課程
+-- Courses Table: 管理員可做任何事，已核准教師可讀取已發佈課程（pending 使用者無法看到）
 create policy "Admins can do everything on courses" on courses for all using (
   exists (select 1 from public.users where id = auth.uid() and role = 'admin')
 );
-create policy "Everyone can view published courses" on courses for select using (
+create policy "Approved users can view published courses" on courses for select using (
   is_published = true
+  and exists (select 1 from public.users where id = auth.uid() and role in ('teacher', 'admin'))
 );
 
--- Lessons Table: 管理員可做任何事，教師可讀取已發佈章節
+-- Lessons Table: 管理員可做任何事，已核准教師可讀取已發佈章節
 create policy "Admins can do everything on lessons" on lessons for all using (
   exists (select 1 from public.users where id = auth.uid() and role = 'admin')
 );
-create policy "Everyone can view published lessons" on lessons for select using (
+create policy "Approved users can view published lessons" on lessons for select using (
   is_published = true
+  and exists (select 1 from public.users where id = auth.uid() and role in ('teacher', 'admin'))
 );
 
--- Contents Table: 管理員可做任何事，教師可讀取章節內容
+-- Contents Table: 管理員可做任何事，已核准教師可讀取章節內容
 create policy "Admins can do everything on contents" on contents for all using (
   exists (select 1 from public.users where id = auth.uid() and role = 'admin')
 );
-create policy "Everyone can view contents" on contents for select using (
-  true
+create policy "Approved users can view contents" on contents for select using (
+  exists (select 1 from public.users where id = auth.uid() and role in ('teacher', 'admin'))
 );
 
 -- Progress Table: 教師可管理自己的進度，管理員可檢視所有進度
@@ -168,7 +170,7 @@ create table teacher_invites (
   id uuid default gen_random_uuid() primary key,
   name text not null,
   email text not null unique,
-  role text check (role in ('teacher', 'admin')) default 'teacher',
+  role text check (role in ('pending', 'teacher', 'admin')) default 'teacher',
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
@@ -218,7 +220,9 @@ create policy "Admins can do everything on announcements" on announcements for a
   exists (select 1 from public.users where id = auth.uid() and role = 'admin')
 );
 
--- 12. 更新 handle_new_user trigger：支援預先建檔的講師自動配對
+-- 12. 更新 handle_new_user trigger：支援預先核准名單（跳過待審核）
+-- 若 email 在 teacher_invites 中 → 直接取得預設角色（teacher/admin），無需審核
+-- 若 email 不在名單中 → 預設為 pending（待審核），需管理員手動核准
 create or replace function public.handle_new_user()
 returns trigger as $$
 declare
@@ -239,12 +243,10 @@ begin
     delete from public.teacher_invites where email = new.email;
   else
     insert into public.users (id, name, email, role)
-    values (new.id, new.raw_user_meta_data->>'full_name', new.email, 'teacher')
+    values (new.id, new.raw_user_meta_data->>'full_name', new.email, 'pending')
     on conflict (id) do nothing;
   end if;
 
   return new;
 end;
 $$ language plpgsql security definer;
-
--- Note: You should update the roles manually in the users table for admins.

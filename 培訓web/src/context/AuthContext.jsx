@@ -75,9 +75,35 @@ export const AuthProvider = ({ children }) => {
                 console.log('Profile fetched:', data.role);
                 setProfile(data);
             } else {
-                // Only default to teacher if NO error occurred but simply no data found
-                console.log('No profile row found, defaulting to teacher');
-                setProfile({ role: 'teacher' });
+                console.log('No profile row found, checking teacher_invites...');
+                const currentUser = (await supabase.auth.getUser()).data?.user;
+                const email = currentUser?.email;
+
+                if (email) {
+                    const { data: invite } = await supabase
+                        .from('teacher_invites')
+                        .select('*')
+                        .eq('email', email)
+                        .maybeSingle();
+
+                    if (invite) {
+                        const { error: insertErr } = await supabase.from('users').insert({
+                            id: userId,
+                            name: invite.name || currentUser.user_metadata?.full_name,
+                            email,
+                            role: invite.role,
+                        });
+                        if (!insertErr) {
+                            await supabase.from('teacher_invites').delete().eq('email', email);
+                            console.log('Profile created from invite:', invite.role);
+                            setProfile({ id: userId, name: invite.name, email, role: invite.role });
+                            return;
+                        }
+                    }
+                }
+
+                console.log('Defaulting to pending');
+                setProfile({ role: 'pending' });
             }
         } catch (err) {
             console.error('Fetch error:', err);

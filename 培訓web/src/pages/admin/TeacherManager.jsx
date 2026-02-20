@@ -1,16 +1,28 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../../lib/supabaseClient';
-import { Users, UserPlus, Shield, ShieldCheck, Trash2, Search, Clock, CheckCircle } from 'lucide-react';
+import { supabase, createIsolatedClient } from '../../lib/supabaseClient';
+import {
+    Users, UserPlus, ShieldCheck, Trash2, Search,
+    Clock, CheckCircle, AlertCircle, Loader2
+} from 'lucide-react';
+
+const DEFAULT_MENTORS = ['懶懶', '叮叮', '樹懶'];
+
+const ROLE_CONFIG = {
+    pending: { label: '待審核' },
+    teacher: { label: '講師' },
+    admin: { label: '管理員' },
+};
 
 const TeacherManager = () => {
     const [users, setUsers] = useState([]);
     const [invites, setInvites] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [tab, setTab] = useState('registered');
+    const [tab, setTab] = useState('pending');
     const [search, setSearch] = useState('');
     const [showForm, setShowForm] = useState(false);
-    const [form, setForm] = useState({ name: '', email: '', role: 'teacher' });
-    const [editingMentor, setEditingMentor] = useState({});
+    const [form, setForm] = useState({ name: '', email: '', password: '', role: 'teacher' });
+    const [creating, setCreating] = useState(false);
+    const [mentorOptions, setMentorOptions] = useState(DEFAULT_MENTORS);
 
     useEffect(() => {
         fetchData();
@@ -22,32 +34,120 @@ const TeacherManager = () => {
             supabase.from('users').select('*').order('created_at', { ascending: false }),
             supabase.from('teacher_invites').select('*').order('created_at', { ascending: false }),
         ]);
-        setUsers(usersRes.data || []);
+        const fetchedUsers = usersRes.data || [];
+        setUsers(fetchedUsers);
         setInvites(invitesRes.data || []);
+
+        const dbMentors = fetchedUsers.map(u => u.mentor_name).filter(Boolean);
+        setMentorOptions([...new Set([...DEFAULT_MENTORS, ...dbMentors])]);
         setLoading(false);
     };
 
-    const handleAddInvite = async () => {
-        if (!form.name || !form.email) {
-            alert('請填寫姓名與 Email');
-            return;
+    const handleMentorChange = async (userId, value) => {
+        if (value === '__add_new__') {
+            const name = window.prompt('請輸入新的輔導員名稱：');
+            if (!name?.trim()) return;
+            const trimmed = name.trim();
+            if (!mentorOptions.includes(trimmed)) {
+                setMentorOptions(prev => [...prev, trimmed]);
+            }
+            value = trimmed;
         }
-        const { error } = await supabase.from('teacher_invites').insert({
-            name: form.name,
-            email: form.email,
-            role: form.role,
-        });
+        const { error } = await supabase.from('users').update({ mentor_name: value || null }).eq('id', userId);
         if (error) {
-            alert('新增失敗：' + error.message);
+            alert('輔導員設定失敗：' + error.message);
             return;
         }
-        setForm({ name: '', email: '', role: 'teacher' });
-        setShowForm(false);
-        fetchData();
+        setUsers(users.map(u => u.id === userId ? { ...u, mentor_name: value || null } : u));
+    };
+
+    const handleDirectCreate = async () => {
+        if (!form.name || !form.email || !form.password) {
+            alert('請填寫姓名、Email 與密碼');
+            return;
+        }
+        if (form.password.length < 6) {
+            alert('密碼至少需要 6 個字元');
+            return;
+        }
+
+        setCreating(true);
+        try {
+            const { data: existingUser } = await supabase
+                .from('users')
+                .select('id')
+                .eq('email', form.email)
+                .maybeSingle();
+
+            if (existingUser) {
+                await supabase.from('users').update({ role: form.role, name: form.name }).eq('id', existingUser.id);
+                setForm({ name: '', email: '', password: '', role: 'teacher' });
+                setShowForm(false);
+                alert('此帳號已存在，已更新角色設定。');
+                fetchData();
+                return;
+            }
+
+            await supabase.from('teacher_invites').delete().eq('email', form.email);
+            const { error: inviteErr } = await supabase.from('teacher_invites').insert({
+                name: form.name,
+                email: form.email,
+                role: form.role,
+            });
+            if (inviteErr) {
+                alert('建檔失敗：' + inviteErr.message);
+                return;
+            }
+
+            const isolated = createIsolatedClient();
+            const { data: signUpData, error: signUpErr } = await isolated.auth.signUp({
+                email: form.email,
+                password: form.password,
+                options: { data: { full_name: form.name } },
+            });
+
+            if (signUpErr) {
+                if (signUpErr.message.includes('rate limit')) {
+                    alert(
+                        '建立失敗：驗證信發送頻率超過限制。\n\n' +
+                        '請到 Supabase Dashboard → Authentication\n' +
+                        '→ 左側選「Sign In / Providers」\n' +
+                        '→ 展開 Email 區塊\n' +
+                        '→ 關閉「Confirm email」\n\n' +
+                        '關閉後再試一次即可。'
+                    );
+                } else if (signUpErr.message.includes('already registered')) {
+                    alert('帳號已重新建檔完成！對方用原本的密碼登入即可獲得新角色。\n（如需重設密碼，請對方使用忘記密碼功能）');
+                } else {
+                    await supabase.from('teacher_invites').delete().eq('email', form.email);
+                    alert('帳號建立失敗：' + signUpErr.message);
+                    return;
+                }
+                setForm({ name: '', email: '', password: '', role: 'teacher' });
+                setShowForm(false);
+                fetchData();
+                return;
+            }
+
+            if (signUpData?.user?.identities?.length === 0) {
+                alert('帳號已重新建檔完成！對方登入後即可獲得新角色。');
+                setForm({ name: '', email: '', password: '', role: 'teacher' });
+                setShowForm(false);
+                fetchData();
+                return;
+            }
+
+            setForm({ name: '', email: '', password: '', role: 'teacher' });
+            setShowForm(false);
+            alert('帳號建立成功！對方可以直接使用 Email 與密碼登入。');
+            fetchData();
+        } finally {
+            setCreating(false);
+        }
     };
 
     const handleDeleteInvite = async (id) => {
-        if (!window.confirm('確定要移除這筆預先建檔？')) return;
+        if (!window.confirm('確定要移除這筆建檔資料？')) return;
         const { error } = await supabase.from('teacher_invites').delete().eq('id', id);
         if (error) {
             alert('刪除失敗：' + error.message);
@@ -56,34 +156,85 @@ const TeacherManager = () => {
         setInvites(invites.filter(i => i.id !== id));
     };
 
+    const handleInviteRoleChange = async (inviteId, newRole) => {
+        const invite = invites.find(i => i.id === inviteId);
+        const oldLabel = ROLE_CONFIG[invite?.role]?.label || invite?.role;
+        const newLabel = ROLE_CONFIG[newRole]?.label || newRole;
+        if (!window.confirm(`確定要將「${invite?.name}」從「${oldLabel}」改為「${newLabel}」嗎？`)) return;
+
+        const { error } = await supabase.from('teacher_invites').update({ role: newRole }).eq('id', inviteId);
+        if (error) {
+            alert('角色變更失敗：' + error.message);
+            return;
+        }
+        setInvites(invites.map(i => i.id === inviteId ? { ...i, role: newRole } : i));
+    };
+
     const handleRoleChange = async (userId, newRole) => {
+        const user = users.find(u => u.id === userId);
+        const oldLabel = ROLE_CONFIG[user?.role]?.label || user?.role;
+        const newLabel = ROLE_CONFIG[newRole]?.label || newRole;
+
+        if (!window.confirm(`確定要將「${user?.name || user?.email}」從「${oldLabel}」改為「${newLabel}」嗎？`)) return;
+
         const { error } = await supabase.from('users').update({ role: newRole }).eq('id', userId);
         if (error) {
-            alert('權限變更失敗：' + error.message);
+            alert('狀態變更失敗：' + error.message);
             return;
         }
         setUsers(users.map(u => u.id === userId ? { ...u, role: newRole } : u));
     };
 
-    const handleMentorSave = async (userId) => {
-        const mentorName = editingMentor[userId] ?? '';
-        const { error } = await supabase.from('users').update({ mentor_name: mentorName }).eq('id', userId);
+    const handleBatchApprove = async () => {
+        const pendingUsers = users.filter(u => u.role === 'pending');
+        if (pendingUsers.length === 0) return;
+        if (!window.confirm(`確定要將所有 ${pendingUsers.length} 位待審核的使用者全部核准為講師嗎？`)) return;
+
+        const ids = pendingUsers.map(u => u.id);
+        const { error } = await supabase.from('users').update({ role: 'teacher' }).in('id', ids);
         if (error) {
-            alert('輔導員設定失敗：' + error.message);
+            alert('批次核准失敗：' + error.message);
             return;
         }
-        setUsers(users.map(u => u.id === userId ? { ...u, mentor_name: mentorName } : u));
-        const next = { ...editingMentor };
-        delete next[userId];
-        setEditingMentor(next);
+        setUsers(users.map(u => ids.includes(u.id) ? { ...u, role: 'teacher' } : u));
     };
 
-    const filteredUsers = users.filter(u =>
-        !search || u.name?.toLowerCase().includes(search.toLowerCase()) || u.email?.toLowerCase().includes(search.toLowerCase())
-    );
-    const filteredInvites = invites.filter(i =>
-        !search || i.name?.toLowerCase().includes(search.toLowerCase()) || i.email?.toLowerCase().includes(search.toLowerCase())
-    );
+    const handleDeleteUser = async (user) => {
+        if (!window.confirm(`確定要移除「${user.name || user.email}」嗎？\n此操作僅移除平台資料，不會刪除登入帳號。`)) return;
+        const { error } = await supabase.from('users').delete().eq('id', user.id);
+        if (error) {
+            alert('刪除失敗：' + error.message);
+            return;
+        }
+        setUsers(users.filter(u => u.id !== user.id));
+    };
+
+    const pendingUsers = users.filter(u => u.role === 'pending');
+    const teacherUsers = users.filter(u => u.role === 'teacher');
+    const adminUsers = users.filter(u => u.role === 'admin');
+    const teacherInvites = invites.filter(i => i.role === 'teacher');
+    const adminInvites = invites.filter(i => i.role === 'admin');
+
+    const getFilteredList = () => {
+        let userList, inviteList;
+        if (tab === 'pending') { userList = pendingUsers; inviteList = []; }
+        else if (tab === 'teacher') { userList = teacherUsers; inviteList = teacherInvites; }
+        else { userList = adminUsers; inviteList = adminInvites; }
+
+        const combined = [
+            ...userList.map(u => ({ ...u, _type: 'user' })),
+            ...inviteList.map(i => ({ ...i, _type: 'invite' })),
+        ];
+
+        if (!search) return combined;
+        const q = search.toLowerCase();
+        return combined.filter(item =>
+            item.name?.toLowerCase().includes(q) || item.email?.toLowerCase().includes(q)
+        );
+    };
+
+    const filteredList = getFilteredList();
+    const showMentorCol = tab === 'teacher';
 
     if (loading) return <div className="p-12 text-center text-slate-500">載入中...</div>;
 
@@ -92,7 +243,7 @@ const TeacherManager = () => {
             <div className="flex items-center justify-between mb-8">
                 <div>
                     <h1 className="text-3xl font-black text-slate-900">講師名單管理</h1>
-                    <p className="text-slate-500 mt-1">管理已註冊講師與預先建檔名單</p>
+                    <p className="text-slate-500 mt-1">審核新註冊使用者與管理講師名單</p>
                 </div>
                 <button
                     onClick={() => setShowForm(!showForm)}
@@ -103,32 +254,26 @@ const TeacherManager = () => {
             </div>
 
             {/* Stats */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-8">
-                <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4">
-                    <div className="w-11 h-11 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center">
-                        <Users className="w-5 h-5" />
-                    </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+                <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-3">
+                    <div className="w-10 h-10 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center"><Clock className="w-5 h-5" /></div>
                     <div>
-                        <div className="text-2xl font-black text-slate-900">{users.length}</div>
-                        <div className="text-xs font-medium text-slate-400">已註冊講師</div>
+                        <div className="text-2xl font-black text-slate-900">{pendingUsers.length}</div>
+                        <div className="text-xs font-medium text-slate-400">待審核</div>
                     </div>
                 </div>
-                <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4">
-                    <div className="w-11 h-11 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center">
-                        <Clock className="w-5 h-5" />
-                    </div>
+                <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-3">
+                    <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center"><Users className="w-5 h-5" /></div>
                     <div>
-                        <div className="text-2xl font-black text-slate-900">{invites.length}</div>
-                        <div className="text-xs font-medium text-slate-400">待註冊名單</div>
+                        <div className="text-2xl font-black text-slate-900">{teacherUsers.length + teacherInvites.length}</div>
+                        <div className="text-xs font-medium text-slate-400">講師</div>
                     </div>
                 </div>
-                <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4">
-                    <div className="w-11 h-11 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center">
-                        <ShieldCheck className="w-5 h-5" />
-                    </div>
+                <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-3">
+                    <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center"><ShieldCheck className="w-5 h-5" /></div>
                     <div>
-                        <div className="text-2xl font-black text-slate-900">{users.filter(u => u.role === 'admin').length}</div>
-                        <div className="text-xs font-medium text-slate-400">管理員人數</div>
+                        <div className="text-2xl font-black text-slate-900">{adminUsers.length + adminInvites.length}</div>
+                        <div className="text-xs font-medium text-slate-400">管理員</div>
                     </div>
                 </div>
             </div>
@@ -136,179 +281,166 @@ const TeacherManager = () => {
             {/* Add form */}
             {showForm && (
                 <div className="bg-white rounded-2xl border border-blue-200 shadow-lg p-6 mb-8">
-                    <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
-                        <UserPlus className="w-5 h-5 text-blue-600" /> 預先建檔（講師註冊後自動配對）
+                    <h3 className="font-bold text-slate-900 mb-2 flex items-center gap-2">
+                        <UserPlus className="w-5 h-5 text-blue-600" /> 直接建立帳號
                     </h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                        <input
-                            type="text"
-                            placeholder="姓名"
-                            value={form.name}
+                    <p className="text-sm text-slate-400 mb-4">
+                        建立完成後，對方可以直接用 Email 和密碼登入，不需要自己註冊。
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-5 gap-4">
+                        <input type="text" placeholder="姓名" value={form.name}
                             onChange={e => setForm({ ...form, name: e.target.value })}
-                            className="px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                        <input
-                            type="email"
-                            placeholder="Email"
-                            value={form.email}
+                            className="px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500" />
+                        <input type="email" placeholder="Email" value={form.email}
                             onChange={e => setForm({ ...form, email: e.target.value })}
-                            className="px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                        <select
-                            value={form.role}
-                            onChange={e => setForm({ ...form, role: e.target.value })}
-                            className="px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                            <option value="teacher">教師</option>
+                            className="px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500" />
+                        <input type="text" placeholder="登入密碼（至少 6 碼）" value={form.password}
+                            onChange={e => setForm({ ...form, password: e.target.value })}
+                            className="px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500" />
+                        <select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })}
+                            className="px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="teacher">講師</option>
                             <option value="admin">管理員</option>
                         </select>
-                        <button
-                            onClick={handleAddInvite}
-                            className="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-blue-700 transition-all"
-                        >
-                            確認新增
+                        <button onClick={handleDirectCreate} disabled={creating}
+                            className="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                            {creating ? <><Loader2 className="w-4 h-4 animate-spin" /> 建立中...</> : '確認建立'}
                         </button>
                     </div>
                 </div>
             )}
 
-            {/* Search + Tabs */}
+            {/* Tabs + Search */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-6">
-                <div className="flex gap-2">
-                    <button
-                        onClick={() => setTab('registered')}
-                        className={`px-5 py-2 rounded-xl text-sm font-bold transition-all ${tab === 'registered' ? 'bg-blue-600 text-white shadow-md' : 'bg-white border border-slate-200 text-slate-500 hover:border-blue-300'}`}
-                    >
-                        已註冊 ({users.length})
-                    </button>
-                    <button
-                        onClick={() => setTab('pending')}
-                        className={`px-5 py-2 rounded-xl text-sm font-bold transition-all ${tab === 'pending' ? 'bg-amber-500 text-white shadow-md' : 'bg-white border border-slate-200 text-slate-500 hover:border-amber-300'}`}
-                    >
-                        待註冊 ({invites.length})
-                    </button>
+                <div className="flex gap-2 flex-wrap">
+                    {[
+                        { key: 'pending', label: '待審核', count: pendingUsers.length, activeColor: 'bg-amber-500' },
+                        { key: 'teacher', label: '講師', count: teacherUsers.length + teacherInvites.length, activeColor: 'bg-blue-600' },
+                        { key: 'admin', label: '管理員', count: adminUsers.length + adminInvites.length, activeColor: 'bg-indigo-600' },
+                    ].map(t => (
+                        <button key={t.key} onClick={() => setTab(t.key)}
+                            className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${
+                                tab === t.key ? `${t.activeColor} text-white shadow-md` : 'bg-white border border-slate-200 text-slate-500 hover:border-slate-300'
+                            }`}>
+                            {t.label} ({t.count})
+                        </button>
+                    ))}
                 </div>
                 <div className="flex-1 relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <input
-                        type="text"
-                        placeholder="搜尋姓名或 Email..."
-                        value={search}
+                    <input type="text" placeholder="搜尋姓名或 Email..." value={search}
                         onChange={e => setSearch(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                    />
+                        className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
             </div>
 
-            {/* Registered teachers */}
-            {tab === 'registered' && (
-                <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
-                    <table className="w-full text-left">
-                        <thead className="bg-slate-50 text-slate-400 text-xs font-bold uppercase tracking-wider">
-                            <tr>
-                                <th className="px-6 py-4">姓名</th>
-                                <th className="px-6 py-4">Email</th>
-                                <th className="px-6 py-4">角色</th>
-                                <th className="px-6 py-4">輔導員</th>
-                                <th className="px-6 py-4">註冊日期</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                            {filteredUsers.map(user => (
-                                <tr key={user.id} className="hover:bg-slate-50 transition-colors">
-                                    <td className="px-6 py-4 font-semibold text-slate-900">{user.name || '—'}</td>
-                                    <td className="px-6 py-4 text-sm text-slate-500">{user.email}</td>
-                                    <td className="px-6 py-4">
-                                        <select
-                                            value={user.role}
-                                            onChange={e => handleRoleChange(user.id, e.target.value)}
-                                            className={`text-xs font-bold px-3 py-1.5 rounded-full border-0 outline-none cursor-pointer ${user.role === 'admin' ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-100 text-slate-600'}`}
-                                        >
-                                            <option value="teacher">教師</option>
-                                            <option value="admin">管理員</option>
-                                        </select>
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        {editingMentor.hasOwnProperty(user.id) ? (
-                                            <div className="flex items-center gap-2">
-                                                <input
-                                                    type="text"
-                                                    value={editingMentor[user.id]}
-                                                    onChange={e => setEditingMentor({ ...editingMentor, [user.id]: e.target.value })}
-                                                    onKeyDown={e => e.key === 'Enter' && handleMentorSave(user.id)}
-                                                    className="px-2 py-1 text-sm border border-blue-300 rounded-lg w-28 outline-none focus:ring-2 focus:ring-blue-500"
-                                                    placeholder="輸入名稱"
-                                                    autoFocus
-                                                />
-                                                <button onClick={() => handleMentorSave(user.id)} className="text-blue-600 hover:text-blue-800">
-                                                    <CheckCircle className="w-4 h-4" />
-                                                </button>
-                                            </div>
-                                        ) : (
-                                            <button
-                                                onClick={() => setEditingMentor({ ...editingMentor, [user.id]: user.mentor_name || '' })}
-                                                className="text-sm text-slate-500 hover:text-blue-600 transition-colors"
-                                            >
-                                                {user.mentor_name || '點擊設定'}
-                                            </button>
-                                        )}
-                                    </td>
-                                    <td className="px-6 py-4 text-xs text-slate-400">
-                                        {new Date(user.created_at).toLocaleDateString()}
-                                    </td>
-                                </tr>
-                            ))}
-                            {filteredUsers.length === 0 && (
-                                <tr><td colSpan="5" className="px-6 py-12 text-center text-slate-400">沒有符合條件的講師</td></tr>
-                            )}
-                        </tbody>
-                    </table>
+            {/* Batch approve banner */}
+            {tab === 'pending' && pendingUsers.length > 0 && (
+                <div className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-6">
+                    <div className="flex items-center gap-3">
+                        <AlertCircle className="w-5 h-5 text-amber-600" />
+                        <span className="text-sm font-medium text-amber-800">有 {pendingUsers.length} 位使用者正在等待審核</span>
+                    </div>
+                    <button onClick={handleBatchApprove}
+                        className="px-4 py-2 bg-amber-600 text-white rounded-xl text-sm font-bold hover:bg-amber-700 transition-all">
+                        全部核准為講師
+                    </button>
                 </div>
             )}
 
-            {/* Pending invites */}
-            {tab === 'pending' && (
-                <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
-                    <table className="w-full text-left">
-                        <thead className="bg-slate-50 text-slate-400 text-xs font-bold uppercase tracking-wider">
-                            <tr>
-                                <th className="px-6 py-4">姓名</th>
-                                <th className="px-6 py-4">Email</th>
-                                <th className="px-6 py-4">預設角色</th>
-                                <th className="px-6 py-4">建檔日期</th>
-                                <th className="px-6 py-4 text-right">操作</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                            {filteredInvites.map(invite => (
-                                <tr key={invite.id} className="hover:bg-slate-50 transition-colors">
-                                    <td className="px-6 py-4 font-semibold text-slate-900">{invite.name}</td>
-                                    <td className="px-6 py-4 text-sm text-slate-500">{invite.email}</td>
+            {/* Table */}
+            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+                <table className="w-full text-left">
+                    <thead className="bg-slate-50 text-slate-400 text-xs font-bold uppercase tracking-wider">
+                        <tr>
+                            <th className="px-6 py-4">姓名</th>
+                            <th className="px-6 py-4">Email</th>
+                            <th className="px-6 py-4">身份</th>
+                            {showMentorCol && <th className="px-6 py-4">輔導員</th>}
+                            <th className="px-6 py-4">日期</th>
+                            <th className="px-6 py-4 text-right">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                        {filteredList.map(item => (
+                            <tr key={`${item._type}-${item.id}`} className="hover:bg-slate-50 transition-colors">
+                                <td className="px-6 py-4">
+                                    <span className="font-semibold text-slate-900">{item.name || '—'}</span>
+                                </td>
+                                <td className="px-6 py-4 text-sm text-slate-500">{item.email}</td>
+                                <td className="px-6 py-4">
+                                    {item._type === 'user' ? (
+                                        <select value={item.role} onChange={e => handleRoleChange(item.id, e.target.value)}
+                                            className={`text-xs font-bold px-3 py-1.5 rounded-full border-0 outline-none cursor-pointer ${
+                                                item.role === 'admin' ? 'bg-indigo-50 text-indigo-600' :
+                                                item.role === 'pending' ? 'bg-amber-50 text-amber-600' :
+                                                'bg-blue-50 text-blue-600'
+                                            }`}>
+                                            {tab === 'pending' && <option value="pending">待審核</option>}
+                                            <option value="teacher">講師</option>
+                                            <option value="admin">管理員</option>
+                                        </select>
+                                    ) : (
+                                        <select value={item.role} onChange={e => handleInviteRoleChange(item.id, e.target.value)}
+                                            className={`text-xs font-bold px-3 py-1.5 rounded-full border-0 outline-none cursor-pointer ${
+                                                item.role === 'admin' ? 'bg-indigo-50 text-indigo-600' : 'bg-blue-50 text-blue-600'
+                                            }`}>
+                                            <option value="teacher">講師</option>
+                                            <option value="admin">管理員</option>
+                                        </select>
+                                    )}
+                                </td>
+                                {showMentorCol && (
                                     <td className="px-6 py-4">
-                                        <span className={`text-xs font-bold px-3 py-1 rounded-full ${invite.role === 'admin' ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-100 text-slate-600'}`}>
-                                            {invite.role === 'admin' ? '管理員' : '教師'}
-                                        </span>
+                                        {item._type === 'user' ? (
+                                            <select
+                                                value={item.mentor_name || ''}
+                                                onChange={e => handleMentorChange(item.id, e.target.value)}
+                                                className={`text-sm w-32 px-3 py-2 rounded-lg outline-none cursor-pointer transition-colors ${
+                                                    item.mentor_name
+                                                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                                        : 'bg-slate-50 text-slate-400 border border-slate-200'
+                                                }`}
+                                            >
+                                                <option value="">未指派</option>
+                                                {mentorOptions.map(m => (
+                                                    <option key={m} value={m}>{m}</option>
+                                                ))}
+                                                <option value="__add_new__">＋ 新增輔導員</option>
+                                            </select>
+                                        ) : (
+                                            <span className="text-xs text-slate-300">—</span>
+                                        )}
                                     </td>
-                                    <td className="px-6 py-4 text-xs text-slate-400">
-                                        {new Date(invite.created_at).toLocaleDateString()}
-                                    </td>
-                                    <td className="px-6 py-4 text-right">
-                                        <button
-                                            onClick={() => handleDeleteInvite(invite.id)}
-                                            className="p-2 text-slate-400 hover:text-red-500 transition-colors"
-                                        >
+                                )}
+                                <td className="px-6 py-4 text-xs text-slate-400">
+                                    {new Date(item.created_at).toLocaleDateString()}
+                                </td>
+                                <td className="px-6 py-4 text-right">
+                                    <div className="flex items-center justify-end gap-1">
+                                        {item._type === 'user' && item.role === 'pending' && (
+                                            <button onClick={() => handleRoleChange(item.id, 'teacher')}
+                                                className="p-2 text-emerald-500 hover:text-emerald-700 transition-colors" title="核准為講師">
+                                                <CheckCircle className="w-4 h-4" />
+                                            </button>
+                                        )}
+                                        <button onClick={() => item._type === 'user' ? handleDeleteUser(item) : handleDeleteInvite(item.id)}
+                                            className="p-2 text-slate-400 hover:text-red-500 transition-colors" title="移除">
                                             <Trash2 className="w-4 h-4" />
                                         </button>
-                                    </td>
-                                </tr>
-                            ))}
-                            {filteredInvites.length === 0 && (
-                                <tr><td colSpan="5" className="px-6 py-12 text-center text-slate-400">目前沒有待註冊的講師</td></tr>
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-            )}
+                                    </div>
+                                </td>
+                            </tr>
+                        ))}
+                        {filteredList.length === 0 && (
+                            <tr><td colSpan={showMentorCol ? 6 : 5} className="px-6 py-12 text-center text-slate-400">
+                                {tab === 'pending' ? '目前沒有待審核的使用者' :
+                                 tab === 'teacher' ? '目前沒有講師' : '目前沒有管理員'}
+                            </td></tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
         </div>
     );
 };

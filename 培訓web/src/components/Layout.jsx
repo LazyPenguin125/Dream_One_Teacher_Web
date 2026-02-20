@@ -31,7 +31,9 @@ const Layout = ({ children }) => {
                     <nav className="flex items-center gap-6">
                         {user ? (
                             <>
-                                <Link to="/courses" className="text-slate-600 hover:text-blue-600 font-medium">我的課程</Link>
+                                {profile?.role !== 'pending' && (
+                                    <Link to="/courses" className="text-slate-600 hover:text-blue-600 font-medium">我的課程</Link>
+                                )}
                                 {profile?.role === 'admin' && (
                                     <Link to="/admin" className="flex items-center gap-1 text-slate-600 hover:text-blue-600 font-medium">
                                         <LayoutDashboard className="w-4 h-4" />

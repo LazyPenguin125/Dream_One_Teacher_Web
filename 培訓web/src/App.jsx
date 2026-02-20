@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Layout from './components/Layout';
 import HomePage from './pages/HomePage';
+import PendingApproval from './pages/PendingApproval';
 import CourseList from './pages/CourseList';
 import LessonView from './pages/LessonView';
 import LessonDetail from './pages/LessonDetail';
@@ -17,6 +18,7 @@ const ProtectedRoute = ({ children, adminOnly = false }) => {
 
   if (loading) return <div className="p-12 text-center text-slate-500 text-lg">載入中...</div>;
   if (!user) return <Navigate to="/" />;
+  if (profile?.role === 'pending') return <Navigate to="/pending" />;
   if (adminOnly && profile?.role !== 'admin') return <Navigate to="/" />;
 
   return children;
@@ -28,6 +30,7 @@ function App() {
       <Router>
         <Routes>
           <Route path="/" element={<Layout><HomePage /></Layout>} />
+          <Route path="/pending" element={<Layout><PendingApproval /></Layout>} />
           <Route
             path="/courses"
             element={
