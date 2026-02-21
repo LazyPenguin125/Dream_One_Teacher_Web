@@ -28,6 +28,7 @@ const DOC_TYPES = [
 
 const REQUIRED_FIELDS = [
     { key: 'full_name', label: '姓名' },
+    { key: 'nickname', label: '講師暱稱' },
     { key: 'gender', label: '性別' },
     { key: 'birth_date', label: '出生年月日' },
     { key: 'id_number', label: '身分證字號' },
@@ -42,7 +43,7 @@ const REQUIRED_FIELDS = [
 ];
 
 const INITIAL_FORM = {
-    full_name: '', gender: '', birth_date: '', id_number: '',
+    full_name: '', nickname: '', gender: '', birth_date: '', id_number: '',
     phone_mobile: '', phone_home: '', line_id: '', address: '',
     email_primary: '', email_secondary: '',
     instructor_role: '', teaching_freq_semester: '', teaching_freq_vacation: '',
@@ -312,6 +313,9 @@ const ProfilePage = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <Field label="姓名" required>
                         <input type="text" value={form.full_name} onChange={e => handleChange('full_name', e.target.value)} className={inputCls} placeholder="請輸入姓名" />
+                    </Field>
+                    <Field label="講師暱稱" required>
+                        <input type="text" value={form.nickname} onChange={e => handleChange('nickname', e.target.value)} className={inputCls} placeholder="留言區顯示用暱稱" />
                     </Field>
                     <Field label="性別" required>
                         <select value={form.gender} onChange={e => handleChange('gender', e.target.value)} className={selectCls}>

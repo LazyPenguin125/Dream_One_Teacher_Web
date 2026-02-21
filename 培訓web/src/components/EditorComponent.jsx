@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import ReactQuill, { Quill } from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
-import { Save, ChevronLeft, Plus, Trash2, FileText, Video, Edit3, GripVertical, ImagePlus, X, Link2 } from 'lucide-react';
+import { Save, ChevronLeft, Plus, Trash2, FileText, Video, Edit3, GripVertical, ImagePlus, X, Link2, LayoutGrid, List } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
+import CanvasEditor from './CanvasEditor';
 
 // ─── 擴展 Quill Image blot：支援 width / style 以實現自由縮放 ────────────
 const BaseImage = Quill.import('formats/image');
@@ -83,6 +84,7 @@ const getContentImageUrl = (path) => {
 
 // ─── Main Component ────────────────────────────────────────────────────────
 const EditorComponent = ({ lessonId, onBack }) => {
+    const [editorMode, setEditorMode] = useState(null); // 'canvas' | 'classic' | null (detecting)
     const [lessonTitle, setLessonTitle] = useState('');
     const [blocks, setBlocks] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -177,6 +179,11 @@ const EditorComponent = ({ lessonId, onBack }) => {
                     .select('*')
                     .eq('lesson_id', lessonId)
                     .order('order', { ascending: true });
+
+                const hasCanvasData = (contents || []).some(c => c.position_data != null);
+                if (editorMode === null) {
+                    setEditorMode(hasCanvasData ? 'canvas' : 'classic');
+                }
 
                 const processed = (contents || []).map(b => {
                     if (b.type === 'image_text') {
@@ -365,8 +372,12 @@ const EditorComponent = ({ lessonId, onBack }) => {
 
     if (loading) return <div className="p-12 text-center text-slate-500 font-bold">載入課程內容中...</div>;
 
+    if (editorMode === 'canvas') {
+        return <CanvasEditor lessonId={lessonId} onBack={onBack} onSwitchToClassic={() => setEditorMode('classic')} />;
+    }
+
     return (
-        <div className="flex flex-col h-full bg-slate-50">
+        <div className="flex flex-col h-[calc(100vh-64px)] bg-slate-50 overflow-hidden">
             {/* ── Top bar ── */}
             <div className="bg-white border-b border-slate-200 flex items-center justify-between px-6 py-4 sticky top-0 z-20 shadow-sm">
                 <div className="flex items-center gap-4">
@@ -383,6 +394,14 @@ const EditorComponent = ({ lessonId, onBack }) => {
                 </div>
 
                 <div className="flex items-center gap-3">
+                    <button
+                        onClick={() => setEditorMode('canvas')}
+                        className="flex items-center gap-2 bg-violet-50 border border-violet-200 text-violet-700 px-4 py-2 rounded-xl hover:bg-violet-100 transition-all font-bold text-sm shadow-sm active:scale-95"
+                        title="切換到畫布自由排版模式"
+                    >
+                        <LayoutGrid className="w-4 h-4" /> 畫布模式
+                    </button>
+                    <div className="w-px h-6 bg-slate-200 mx-1" />
                     <button
                         onClick={addArticleBlock}
                         className="flex items-center gap-2 bg-white border border-slate-200 text-slate-700 px-4 py-2 rounded-xl hover:border-blue-500 hover:text-blue-600 transition-all font-bold text-sm shadow-sm active:scale-95"

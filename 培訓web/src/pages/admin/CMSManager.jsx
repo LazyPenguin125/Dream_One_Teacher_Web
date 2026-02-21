@@ -112,11 +112,7 @@ const CMSManager = () => {
 
     // Render Editor if a lesson is selected
     if (editingLessonId) {
-        return (
-            <div className="h-[calc(100vh-64px)] overflow-hidden">
-                <EditorComponent lessonId={editingLessonId} onBack={() => setEditingLessonId(null)} />
-            </div>
-        );
+        return <EditorComponent lessonId={editingLessonId} onBack={() => setEditingLessonId(null)} />;
     }
 
 
