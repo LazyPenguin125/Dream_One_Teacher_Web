@@ -1,6 +1,21 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import { Megaphone, Plus, Edit2, Trash2, Pin, PinOff, Eye, EyeOff, X, Save } from 'lucide-react';
+import ReactQuill from 'react-quill-new';
+import 'react-quill-new/dist/quill.snow.css';
+
+const QUILL_MODULES = {
+    toolbar: [
+        [{ header: [1, 2, 3, false] }],
+        ['bold', 'italic', 'underline', 'strike'],
+        ['blockquote'],
+        [{ list: 'ordered' }, { list: 'bullet' }],
+        [{ color: [] }, { background: [] }],
+        [{ align: [] }],
+        ['link', 'image'],
+        ['clean'],
+    ],
+};
 
 const EMPTY_FORM = { title: '', content: '', tag: '一般公告', pinned: false, published: true };
 
@@ -148,13 +163,15 @@ const AnnouncementManager = () => {
                         </div>
                         <div>
                             <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">內容</label>
-                            <textarea
-                                rows="4"
-                                value={form.content}
-                                onChange={e => setForm({ ...form, content: e.target.value })}
-                                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                                placeholder="公告內容..."
-                            />
+                            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden [&_.ql-toolbar]:border-0 [&_.ql-toolbar]:border-b [&_.ql-toolbar]:border-slate-200 [&_.ql-toolbar]:bg-slate-50 [&_.ql-container]:border-0 [&_.ql-editor]:min-h-[180px] [&_.ql-editor]:text-sm [&_.ql-editor]:leading-relaxed">
+                                <ReactQuill
+                                    theme="snow"
+                                    value={form.content}
+                                    onChange={val => setForm({ ...form, content: val })}
+                                    modules={QUILL_MODULES}
+                                    placeholder="在此輸入公告內容，可插入圖片、連結..."
+                                />
+                            </div>
                         </div>
                         <div className="flex items-center gap-6">
                             <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 cursor-pointer">
@@ -219,7 +236,7 @@ const AnnouncementManager = () => {
                                     </span>
                                 </div>
                                 <h3 className="font-bold text-slate-900 mb-1">{a.title}</h3>
-                                <p className="text-sm text-slate-500 leading-relaxed line-clamp-2">{a.content}</p>
+                                <div className="text-sm text-slate-500 leading-relaxed line-clamp-2 [&_img]:hidden [&_p]:m-0" dangerouslySetInnerHTML={{ __html: a.content }} />
                             </div>
                             <div className="flex items-center gap-1 shrink-0">
                                 <button onClick={() => togglePinned(a)} className="p-2 text-slate-300 hover:text-red-500 transition-colors" title={a.pinned ? '取消置頂' : '置頂'}>

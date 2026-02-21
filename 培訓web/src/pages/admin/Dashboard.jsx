@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabaseClient';
-import { Plus, Edit2, Trash2, Eye, EyeOff, LayoutGrid, Users, ClipboardCheck, UserCog, BarChart3, Megaphone, ChevronRight } from 'lucide-react';
+import { Plus, Edit2, Trash2, Eye, EyeOff, LayoutGrid, Users, ClipboardCheck, UserCog, BarChart3, Megaphone, ChevronRight, ContactRound } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 const AdminDashboard = () => {
@@ -104,7 +104,7 @@ const AdminDashboard = () => {
             </div>
 
             {/* Quick nav */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-12">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-12">
                 <Link to="/admin/teachers" className="group bg-white p-5 rounded-2xl border border-slate-100 shadow-sm hover:border-blue-300 hover:shadow-md transition-all flex items-center gap-4">
                     <div className="w-11 h-11 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-colors">
                         <UserCog className="w-5 h-5" />
@@ -134,6 +134,16 @@ const AdminDashboard = () => {
                         <div className="text-xs text-slate-400">新增、編輯首頁公告內容</div>
                     </div>
                     <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-red-400 transition-colors" />
+                </Link>
+                <Link to="/admin/instructors" className="group bg-white p-5 rounded-2xl border border-slate-100 shadow-sm hover:border-purple-300 hover:shadow-md transition-all flex items-center gap-4">
+                    <div className="w-11 h-11 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center group-hover:bg-purple-600 group-hover:text-white transition-colors">
+                        <ContactRound className="w-5 h-5" />
+                    </div>
+                    <div className="flex-1">
+                        <div className="font-bold text-slate-900">講師資料總覽</div>
+                        <div className="text-xs text-slate-400">查看所有講師個人資料與文件</div>
+                    </div>
+                    <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-purple-400 transition-colors" />
                 </Link>
             </div>
 

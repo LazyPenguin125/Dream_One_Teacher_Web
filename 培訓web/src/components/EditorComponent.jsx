@@ -1,23 +1,54 @@
-import { useState, useEffect } from 'react';
-import ReactQuill from 'react-quill-new';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import ReactQuill, { Quill } from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
-import { Save, ChevronLeft, Plus, Trash2, FileText, Video, Edit3, GripVertical } from 'lucide-react';
+import { Save, ChevronLeft, Plus, Trash2, FileText, Video, Edit3, GripVertical, ImagePlus, X, Link2 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 
-// ─── Quill toolbar config ──────────────────────────────────────────────────
-const QUILL_MODULES = {
-    toolbar: [
-        [{ header: [1, 2, 3, false] }],
-        ['bold', 'italic', 'underline', 'strike'],
-        ['blockquote', 'code-block'],
-        [{ list: 'ordered' }, { list: 'bullet' }],
-        [{ indent: '-1' }, { indent: '+1' }],
-        [{ color: [] }, { background: [] }],
-        [{ align: [] }],
-        ['link', 'image'],
-        ['clean'],
-    ],
-};
+// ─── 擴展 Quill Image blot：支援 width / style 以實現自由縮放 ────────────
+const BaseImage = Quill.import('formats/image');
+class ResizableImage extends BaseImage {
+    static create(value) {
+        const node = super.create(typeof value === 'string' ? value : value);
+        return node;
+    }
+    static formats(domNode) {
+        const formats = {};
+        if (domNode.hasAttribute('width')) formats.width = domNode.getAttribute('width');
+        if (domNode.style?.width) formats.width = domNode.style.width;
+        if (domNode.style?.float) formats.float = domNode.style.float;
+        if (domNode.style?.margin) formats.margin = domNode.style.margin;
+        return formats;
+    }
+    format(name, value) {
+        if (name === 'width') {
+            if (value) { this.domNode.style.width = value; this.domNode.removeAttribute('width'); }
+            else { this.domNode.style.width = ''; }
+        } else if (name === 'float') {
+            this.domNode.style.float = value || '';
+            this.domNode.style.margin = value === 'left' ? '0 1em 0.5em 0' : value === 'right' ? '0 0 0.5em 1em' : '';
+        } else {
+            super.format(name, value);
+        }
+    }
+}
+ResizableImage.blotName = 'image';
+ResizableImage.tagName = 'IMG';
+Quill.register(ResizableImage, true);
+
+// ─── Quill toolbar 設定 ──────────────────────────────────────────────────
+const TOOLBAR_OPTIONS = [
+    [{ header: [1, 2, 3, false] }],
+    ['bold', 'italic', 'underline', 'strike'],
+    ['blockquote', 'code-block'],
+    [{ list: 'ordered' }, { list: 'bullet' }],
+    [{ indent: '-1' }, { indent: '+1' }],
+    [{ color: [] }, { background: [] }],
+    [{ align: [] }],
+    ['link', 'image', 'video'],
+    ['clean'],
+];
+
+const QUILL_MODULES = { toolbar: TOOLBAR_OPTIONS };
 
 // ─── YouTube URL → embed URL 轉換 ──────────────────────────────────────────
 const toEmbedUrl = (url) => {
@@ -44,12 +75,90 @@ const toEmbedUrl = (url) => {
     return url;
 };
 
+const getContentImageUrl = (path) => {
+    if (!path) return null;
+    const { data } = supabase.storage.from('content-images').getPublicUrl(path);
+    return data?.publicUrl;
+};
+
 // ─── Main Component ────────────────────────────────────────────────────────
 const EditorComponent = ({ lessonId, onBack }) => {
     const [lessonTitle, setLessonTitle] = useState('');
-    const [blocks, setBlocks] = useState([]);     // { id, type, title, body, video_url, order, isNew }
+    const [blocks, setBlocks] = useState([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const imageInputRefs = useRef({});
+    const [imageUploading, setImageUploading] = useState({});
+    const [activeImage, setActiveImage] = useState(null);
+    const imageHandlerRef = useRef();
+
+    // ── 自訂圖片上傳 handler（上傳到 Supabase Storage，非 base64）──
+    imageHandlerRef.current = function () {
+        const quill = this.quill;
+        const input = document.createElement('input');
+        input.setAttribute('type', 'file');
+        input.setAttribute('accept', 'image/*');
+        input.click();
+        input.onchange = async () => {
+            const file = input.files[0];
+            if (!file) return;
+            if (!file.type.startsWith('image/')) { alert('僅接受圖片檔案'); return; }
+            if (file.size > 10 * 1024 * 1024) { alert('檔案大小不可超過 10MB'); return; }
+
+            const ext = file.name.split('.').pop();
+            const path = `content/${lessonId}/${crypto.randomUUID()}.${ext}`;
+            const { error } = await supabase.storage.from('content-images').upload(path, file);
+            if (error) { alert('圖片上傳失敗：' + error.message); return; }
+
+            const url = supabase.storage.from('content-images').getPublicUrl(path).data?.publicUrl;
+            if (url) {
+                const range = quill.getSelection(true);
+                quill.insertEmbed(range.index, 'image', url, 'user');
+                quill.setSelection(range.index + 1);
+            }
+        };
+    };
+
+    const quillModules = useMemo(() => ({
+        toolbar: {
+            container: TOOLBAR_OPTIONS,
+            handlers: {
+                image: function () { imageHandlerRef.current?.call(this); },
+            },
+        },
+    }), []);
+
+    // ── 點擊圖片時顯示大小工具列 ──
+    const handleEditorClick = useCallback((e) => {
+        if (e.target.tagName === 'IMG' && e.target.closest('.ql-editor')) {
+            e.stopPropagation();
+            const rect = e.target.getBoundingClientRect();
+            setActiveImage({ element: e.target, rect });
+        }
+    }, []);
+
+    const applyImageSize = useCallback((widthValue, floatValue) => {
+        if (!activeImage?.element) return;
+        const blot = Quill.find(activeImage.element);
+        if (blot) {
+            blot.format('width', widthValue);
+            blot.format('float', floatValue || '');
+        } else {
+            activeImage.element.style.width = widthValue;
+        }
+        setActiveImage(null);
+    }, [activeImage]);
+
+    useEffect(() => {
+        if (!activeImage) return;
+        const close = (e) => {
+            if (!e.target.closest('.image-size-toolbar') && e.target.tagName !== 'IMG') {
+                setActiveImage(null);
+            }
+        };
+        document.addEventListener('mousedown', close);
+        return () => document.removeEventListener('mousedown', close);
+    }, [activeImage]);
 
     // ── Fetch all content blocks ──
     useEffect(() => {
@@ -69,7 +178,16 @@ const EditorComponent = ({ lessonId, onBack }) => {
                     .eq('lesson_id', lessonId)
                     .order('order', { ascending: true });
 
-                setBlocks(contents || []);
+                const processed = (contents || []).map(b => {
+                    if (b.type === 'image_text') {
+                        try {
+                            const parsed = JSON.parse(b.body || '{}');
+                            return { ...b, caption: parsed.caption || '', captionLink: parsed.captionLink || '' };
+                        } catch { return { ...b, caption: '', captionLink: '' }; }
+                    }
+                    return b;
+                });
+                setBlocks(processed);
             } catch (err) {
                 console.error('fetch error:', err);
             } finally {
@@ -100,6 +218,59 @@ const EditorComponent = ({ lessonId, onBack }) => {
         setBlocks(prev => [...prev, newBlock]);
     };
 
+    // ── Add image_text block ──
+    const addImageTextBlock = () => {
+        const newOrder = blocks.length > 0 ? Math.max(...blocks.map(b => b.order ?? 0)) + 1 : 0;
+        const tempId = `new_${Date.now()}`;
+        const newBlock = {
+            id: tempId, type: 'image_text', title: '圖文區塊',
+            video_url: '', body: '', caption: '', captionLink: '',
+            order: newOrder, isNew: true,
+        };
+        setBlocks(prev => [...prev, newBlock]);
+    };
+
+    // ── Upload image for image_text block ──
+    const handleContentImageUpload = async (blockId, file) => {
+        if (!file.type.startsWith('image/')) {
+            alert('僅接受圖片檔案（JPEG、PNG、GIF、WebP）');
+            return;
+        }
+        if (file.size > 10 * 1024 * 1024) {
+            alert('檔案大小不可超過 10MB');
+            return;
+        }
+        setImageUploading(prev => ({ ...prev, [blockId]: true }));
+
+        const block = blocks.find(b => b.id === blockId);
+        if (block?.video_url) {
+            await supabase.storage.from('content-images').remove([block.video_url]);
+        }
+
+        const ext = file.name.split('.').pop();
+        const path = `content/${lessonId}/${crypto.randomUUID()}.${ext}`;
+
+        const { error } = await supabase.storage
+            .from('content-images')
+            .upload(path, file);
+
+        if (error) {
+            alert('圖片上傳失敗：' + error.message);
+            setImageUploading(prev => ({ ...prev, [blockId]: false }));
+            return;
+        }
+        updateBlock(blockId, 'video_url', path);
+        setImageUploading(prev => ({ ...prev, [blockId]: false }));
+    };
+
+    const handleRemoveContentImage = async (blockId) => {
+        const block = blocks.find(b => b.id === blockId);
+        if (block?.video_url) {
+            await supabase.storage.from('content-images').remove([block.video_url]);
+        }
+        updateBlock(blockId, 'video_url', '');
+    };
+
     // ── Save all blocks ──
     const handleSaveAll = async () => {
         setSaving(true);
@@ -113,7 +284,9 @@ const EditorComponent = ({ lessonId, onBack }) => {
                     lesson_id: lessonId,
                     type: b.type === 'text' ? 'article' : b.type,
                     title: b.title || '',
-                    body: b.body || '',
+                    body: b.type === 'image_text'
+                        ? JSON.stringify({ caption: b.caption || '', captionLink: b.captionLink || '' })
+                        : (b.body || ''),
                     video_url: b.video_url || null,
                     order: b.order,
                     status: 'draft',
@@ -130,7 +303,9 @@ const EditorComponent = ({ lessonId, onBack }) => {
                 const payload = {
                     type: b.type === 'text' ? 'article' : b.type,
                     title: b.title || '',
-                    body: b.body || '',
+                    body: b.type === 'image_text'
+                        ? JSON.stringify({ caption: b.caption || '', captionLink: b.captionLink || '' })
+                        : (b.body || ''),
                     video_url: b.video_url || null,
                     order: b.order,
                 };
@@ -150,7 +325,16 @@ const EditorComponent = ({ lessonId, onBack }) => {
                 .eq('lesson_id', lessonId)
                 .order('order', { ascending: true });
 
-            setBlocks(refreshed || []);
+            const processedRefresh = (refreshed || []).map(b => {
+                if (b.type === 'image_text') {
+                    try {
+                        const parsed = JSON.parse(b.body || '{}');
+                        return { ...b, caption: parsed.caption || '', captionLink: parsed.captionLink || '' };
+                    } catch { return { ...b, caption: '', captionLink: '' }; }
+                }
+                return b;
+            });
+            setBlocks(processedRefresh);
             alert('所有內容已儲存成功！');
         } catch (err) {
             console.error('儲存失敗:', err);
@@ -163,6 +347,11 @@ const EditorComponent = ({ lessonId, onBack }) => {
     // ── Delete block ──
     const handleDelete = async (blockId, isNew) => {
         if (!window.confirm('確定要刪除此區塊嗎？')) return;
+
+        const block = blocks.find(b => b.id === blockId);
+        if (block?.type === 'image_text' && block.video_url) {
+            await supabase.storage.from('content-images').remove([block.video_url]);
+        }
 
         if (!isNew) {
             const { error } = await supabase.from('contents').delete().eq('id', blockId);
@@ -206,6 +395,12 @@ const EditorComponent = ({ lessonId, onBack }) => {
                     >
                         <Plus className="w-4 h-4" /> 新增影片
                     </button>
+                    <button
+                        onClick={addImageTextBlock}
+                        className="flex items-center gap-2 bg-white border border-slate-200 text-slate-700 px-4 py-2 rounded-xl hover:border-emerald-500 hover:text-emerald-600 transition-all font-bold text-sm shadow-sm active:scale-95"
+                    >
+                        <Plus className="w-4 h-4" /> 新增圖文
+                    </button>
                     <div className="w-px h-6 bg-slate-200 mx-1" />
                     <button
                         onClick={handleSaveAll}
@@ -232,6 +427,8 @@ const EditorComponent = ({ lessonId, onBack }) => {
                                 <button onClick={addArticleBlock} className="text-blue-600 font-bold text-sm hover:underline">+ 加入文字內容</button>
                                 <span className="text-slate-200">|</span>
                                 <button onClick={addVideoBlock} className="text-purple-600 font-bold text-sm hover:underline">+ 加入影音教材</button>
+                                <span className="text-slate-200">|</span>
+                                <button onClick={addImageTextBlock} className="text-emerald-600 font-bold text-sm hover:underline">+ 加入圖文區塊</button>
                             </div>
                         </div>
                     )}
@@ -247,7 +444,7 @@ const EditorComponent = ({ lessonId, onBack }) => {
                                     <div className="flex items-center gap-1.5 grayscale group-hover:grayscale-0 transition-all">
                                         <GripVertical className="w-4 h-4 text-slate-300" />
                                         <span className="text-[10px] font-black text-slate-400 bg-white border border-slate-200 px-2 py-0.5 rounded-full">
-                                            #{index + 1} {block.type === 'video' ? 'VIDEO' : 'ARTICLE'}
+                                            #{index + 1} {block.type === 'video' ? 'VIDEO' : block.type === 'image_text' ? 'IMAGE' : 'ARTICLE'}
                                         </span>
                                     </div>
                                     <input
@@ -269,7 +466,75 @@ const EditorComponent = ({ lessonId, onBack }) => {
 
                             {/* Block Content */}
                             <div className="p-6">
-                                {block.type === 'video' ? (
+                                {block.type === 'image_text' ? (
+                                    <div className="space-y-4">
+                                        <div className="border-2 border-dashed border-slate-200 rounded-2xl overflow-hidden hover:border-emerald-300 transition-colors">
+                                            {block.video_url ? (
+                                                <div className="relative group">
+                                                    <img
+                                                        src={getContentImageUrl(block.video_url)}
+                                                        alt="圖文區塊"
+                                                        className="max-h-80 w-full object-contain bg-slate-50 p-2"
+                                                    />
+                                                    <button
+                                                        onClick={() => handleRemoveContentImage(block.id)}
+                                                        className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 shadow-lg"
+                                                    >
+                                                        <X className="w-4 h-4" />
+                                                    </button>
+                                                </div>
+                                            ) : imageUploading[block.id] ? (
+                                                <div className="py-16 flex flex-col items-center gap-2 text-emerald-500">
+                                                    <div className="w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+                                                    <span className="text-sm font-medium">上傳中⋯</span>
+                                                </div>
+                                            ) : (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => imageInputRefs.current[block.id]?.click()}
+                                                    className="py-16 w-full flex flex-col items-center gap-3 text-slate-400 hover:text-emerald-500 transition-colors"
+                                                >
+                                                    <ImagePlus className="w-12 h-12" />
+                                                    <span className="text-sm font-bold">點擊上傳圖片</span>
+                                                    <span className="text-xs text-slate-300">支援 JPEG、PNG、GIF、WebP，上限 10MB</span>
+                                                </button>
+                                            )}
+                                            <input
+                                                ref={el => (imageInputRefs.current[block.id] = el)}
+                                                type="file"
+                                                accept="image/*"
+                                                className="hidden"
+                                                onChange={e => {
+                                                    if (e.target.files[0]) handleContentImageUpload(block.id, e.target.files[0]);
+                                                    e.target.value = '';
+                                                }}
+                                            />
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                            <div className="flex items-center gap-2 bg-slate-50 border border-slate-100 p-3 rounded-xl">
+                                                <FileText className="w-4 h-4 text-slate-400 shrink-0" />
+                                                <input
+                                                    type="text"
+                                                    value={block.caption || ''}
+                                                    onChange={e => updateBlock(block.id, 'caption', e.target.value)}
+                                                    placeholder="圖片說明文字"
+                                                    className="flex-1 bg-transparent border-none outline-none text-sm focus:ring-0"
+                                                />
+                                            </div>
+                                            <div className="flex items-center gap-2 bg-slate-50 border border-slate-100 p-3 rounded-xl">
+                                                <Link2 className="w-4 h-4 text-slate-400 shrink-0" />
+                                                <input
+                                                    type="url"
+                                                    value={block.captionLink || ''}
+                                                    onChange={e => updateBlock(block.id, 'captionLink', e.target.value)}
+                                                    placeholder="超連結 URL（選填）"
+                                                    className="flex-1 bg-transparent border-none outline-none text-sm focus:ring-0"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                ) : block.type === 'video' ? (
                                     <div className="space-y-4">
                                         <div className="flex items-center gap-3 bg-slate-50 border border-slate-100 p-3 rounded-2xl">
                                             <Video className="w-5 h-5 text-purple-500" />
@@ -309,13 +574,13 @@ const EditorComponent = ({ lessonId, onBack }) => {
                                         )}
                                     </div>
                                 ) : (
-                                    <div className="quill-minimal-editor">
+                                    <div className="quill-minimal-editor" onClick={handleEditorClick}>
                                         <ReactQuill
                                             theme="snow"
                                             value={block.body || ''}
                                             onChange={(val) => updateBlock(block.id, 'body', val)}
-                                            modules={QUILL_MODULES}
-                                            placeholder="在此輸入您的文章內容..."
+                                            modules={quillModules}
+                                            placeholder="在此輸入您的文章內容，可自由插入圖片與影片..."
                                         />
                                     </div>
                                 )}
@@ -338,10 +603,52 @@ const EditorComponent = ({ lessonId, onBack }) => {
                             >
                                 <Plus className="w-4 h-4" /> 新增影片區塊
                             </button>
+                            <button
+                                onClick={addImageTextBlock}
+                                className="flex items-center gap-2 bg-white border border-slate-200 text-slate-700 px-6 py-3 rounded-2xl hover:border-emerald-500 hover:text-emerald-600 transition-all font-bold text-sm shadow-sm"
+                            >
+                                <Plus className="w-4 h-4" /> 新增圖文區塊
+                            </button>
                         </div>
                     )}
                 </div>
             </div>
+
+            {/* ── 圖片大小調整浮動工具列 ── */}
+            {activeImage && (
+                <div
+                    className="image-size-toolbar fixed z-50 bg-white shadow-xl rounded-xl border border-slate-200 p-2 flex items-center gap-1"
+                    style={{
+                        top: `${Math.min(activeImage.rect.bottom + 8, window.innerHeight - 60)}px`,
+                        left: `${Math.max(8, activeImage.rect.left + activeImage.rect.width / 2 - 180)}px`,
+                    }}
+                >
+                    <span className="text-[10px] text-slate-400 font-bold px-2 whitespace-nowrap">大小：</span>
+                    {[
+                        { label: '25%', w: '25%' },
+                        { label: '33%', w: '33%' },
+                        { label: '50%', w: '50%' },
+                        { label: '75%', w: '75%' },
+                        { label: '100%', w: '100%' },
+                    ].map(opt => (
+                        <button
+                            key={opt.label}
+                            onClick={() => applyImageSize(opt.w, null)}
+                            className="px-2.5 py-1 text-xs font-bold rounded-lg hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                        >
+                            {opt.label}
+                        </button>
+                    ))}
+                    <div className="w-px h-5 bg-slate-200 mx-1" />
+                    <span className="text-[10px] text-slate-400 font-bold px-1 whitespace-nowrap">對齊：</span>
+                    <button onClick={() => applyImageSize(activeImage.element.style.width || '50%', 'left')}
+                        className="px-2 py-1 text-xs font-bold rounded-lg hover:bg-emerald-50 hover:text-emerald-600 transition-colors" title="靠左（文繞圖）">⬅</button>
+                    <button onClick={() => applyImageSize(activeImage.element.style.width || '100%', '')}
+                        className="px-2 py-1 text-xs font-bold rounded-lg hover:bg-slate-100 transition-colors" title="置中（獨立行）">⬛</button>
+                    <button onClick={() => applyImageSize(activeImage.element.style.width || '50%', 'right')}
+                        className="px-2 py-1 text-xs font-bold rounded-lg hover:bg-emerald-50 hover:text-emerald-600 transition-colors" title="靠右（文繞圖）">➡</button>
+                </div>
+            )}
 
             <style dangerouslySetInnerHTML={{
                 __html: `
@@ -362,6 +669,22 @@ const EditorComponent = ({ lessonId, onBack }) => {
                 .quill-minimal-editor .ql-editor {
                     padding: 20px 0 !important;
                     min-height: 150px;
+                }
+                .quill-minimal-editor .ql-editor img {
+                    max-width: 100%;
+                    border-radius: 12px;
+                    cursor: pointer;
+                    transition: box-shadow 0.2s;
+                    display: inline-block;
+                    vertical-align: top;
+                }
+                .quill-minimal-editor .ql-editor img:hover {
+                    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
+                }
+                .quill-minimal-editor .ql-editor iframe {
+                    max-width: 100%;
+                    border-radius: 12px;
+                    margin: 8px 0;
                 }
             `}} />
         </div>

@@ -157,9 +157,10 @@ const HomePage = () => {
                     {announcements.length > 0 ? (
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                             {announcements.map((a) => (
-                                <div
+                                <Link
+                                    to={`/announcements/${a.id}`}
                                     key={a.id}
-                                    className={`relative bg-white rounded-2xl border p-6 transition-all hover:shadow-lg hover:-translate-y-1 ${
+                                    className={`relative bg-white rounded-2xl border p-6 transition-all hover:shadow-lg hover:-translate-y-1 cursor-pointer block ${
                                         a.pinned
                                             ? 'border-red-200 shadow-md shadow-red-50 ring-1 ring-red-100'
                                             : 'border-slate-150 shadow-sm'
@@ -189,8 +190,9 @@ const HomePage = () => {
                                     </div>
 
                                     <h3 className="font-bold text-slate-900 mb-2 leading-snug">{a.title}</h3>
-                                    <p className="text-sm text-slate-500 leading-relaxed">{a.content}</p>
-                                </div>
+                                    <div className="text-sm text-slate-500 leading-relaxed line-clamp-3 [&_img]:hidden [&_p]:m-0" dangerouslySetInnerHTML={{ __html: a.content }} />
+                                    <span className="inline-block mt-3 text-xs font-bold text-blue-500">閱讀更多 →</span>
+                                </Link>
                             ))}
                         </div>
                     ) : (

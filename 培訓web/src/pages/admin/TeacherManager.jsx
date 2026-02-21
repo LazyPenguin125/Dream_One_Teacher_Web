@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase, createIsolatedClient } from '../../lib/supabaseClient';
 import {
     Users, UserPlus, ShieldCheck, Trash2, Search,
-    Clock, CheckCircle, AlertCircle, Loader2
+    Clock, CheckCircle, AlertCircle, Loader2,
+    ChevronDown, ChevronUp, Eye, MapPin
 } from 'lucide-react';
 
 const DEFAULT_MENTORS = ['懶懶', '叮叮', '樹懶'];
@@ -12,6 +13,8 @@ const ROLE_CONFIG = {
     teacher: { label: '講師' },
     admin: { label: '管理員' },
 };
+
+const INSTRUCTOR_ROLE_LABELS = { S: 'S 級', 'A+': 'A+ 級', A: 'A 級', B: 'B 級', '實習': '實習' };
 
 const TeacherManager = () => {
     const [users, setUsers] = useState([]);
@@ -23,6 +26,9 @@ const TeacherManager = () => {
     const [form, setForm] = useState({ name: '', email: '', password: '', role: 'teacher' });
     const [creating, setCreating] = useState(false);
     const [mentorOptions, setMentorOptions] = useState(DEFAULT_MENTORS);
+    const [showDetail, setShowDetail] = useState(false);
+    const [instructorMap, setInstructorMap] = useState({});
+    const [expandedId, setExpandedId] = useState(null);
 
     useEffect(() => {
         fetchData();
@@ -30,13 +36,18 @@ const TeacherManager = () => {
 
     const fetchData = async () => {
         setLoading(true);
-        const [usersRes, invitesRes] = await Promise.all([
+        const [usersRes, invitesRes, instructorsRes] = await Promise.all([
             supabase.from('users').select('*').order('created_at', { ascending: false }),
             supabase.from('teacher_invites').select('*').order('created_at', { ascending: false }),
+            supabase.from('instructors').select('*'),
         ]);
         const fetchedUsers = usersRes.data || [];
         setUsers(fetchedUsers);
         setInvites(invitesRes.data || []);
+
+        const iMap = {};
+        (instructorsRes.data || []).forEach(inst => { iMap[inst.user_id] = inst; });
+        setInstructorMap(iMap);
 
         const dbMentors = fetchedUsers.map(u => u.mentor_name).filter(Boolean);
         setMentorOptions([...new Set([...DEFAULT_MENTORS, ...dbMentors])]);
@@ -200,13 +211,17 @@ const TeacherManager = () => {
     };
 
     const handleDeleteUser = async (user) => {
-        if (!window.confirm(`確定要移除「${user.name || user.email}」嗎？\n此操作僅移除平台資料，不會刪除登入帳號。`)) return;
-        const { error } = await supabase.from('users').delete().eq('id', user.id);
+        if (!window.confirm(`確定要徹底刪除「${user.name || user.email}」嗎？\n此操作將同時刪除登入帳號與所有相關資料，無法復原。`)) return;
+        const { error } = await supabase.rpc('delete_user_completely', { target_user_id: user.id });
         if (error) {
             alert('刪除失敗：' + error.message);
             return;
         }
+        if (user.email) {
+            await supabase.from('teacher_invites').delete().eq('email', user.email);
+        }
         setUsers(users.filter(u => u.id !== user.id));
+        setInvites(prev => prev.filter(i => i.email !== user.email));
     };
 
     const pendingUsers = users.filter(u => u.role === 'pending');
@@ -310,7 +325,7 @@ const TeacherManager = () => {
                 </div>
             )}
 
-            {/* Tabs + Search */}
+            {/* Tabs + Search + Toggle */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-6">
                 <div className="flex gap-2 flex-wrap">
                     {[
@@ -318,7 +333,7 @@ const TeacherManager = () => {
                         { key: 'teacher', label: '講師', count: teacherUsers.length + teacherInvites.length, activeColor: 'bg-blue-600' },
                         { key: 'admin', label: '管理員', count: adminUsers.length + adminInvites.length, activeColor: 'bg-indigo-600' },
                     ].map(t => (
-                        <button key={t.key} onClick={() => setTab(t.key)}
+                        <button key={t.key} onClick={() => { setTab(t.key); setExpandedId(null); }}
                             className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${
                                 tab === t.key ? `${t.activeColor} text-white shadow-md` : 'bg-white border border-slate-200 text-slate-500 hover:border-slate-300'
                             }`}>
@@ -326,6 +341,17 @@ const TeacherManager = () => {
                         </button>
                     ))}
                 </div>
+
+                <label className="flex items-center gap-2 cursor-pointer select-none shrink-0"
+                    onClick={() => { setShowDetail(v => !v); setExpandedId(null); }}>
+                    <div className={`relative w-9 h-5 rounded-full transition-colors ${showDetail ? 'bg-blue-600' : 'bg-slate-300'}`}>
+                        <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${showDetail ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
+                    </div>
+                    <span className="text-sm text-slate-600 flex items-center gap-1">
+                        <Eye className="w-3.5 h-3.5" /> 詳細資料
+                    </span>
+                </label>
+
                 <div className="flex-1 relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <input type="text" placeholder="搜尋姓名或 Email..." value={search}
@@ -356,84 +382,155 @@ const TeacherManager = () => {
                             <th className="px-6 py-4">姓名</th>
                             <th className="px-6 py-4">Email</th>
                             <th className="px-6 py-4">身份</th>
+                            <th className="px-6 py-4">講師等級</th>
                             {showMentorCol && <th className="px-6 py-4">輔導員</th>}
                             <th className="px-6 py-4">日期</th>
                             <th className="px-6 py-4 text-right">操作</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                        {filteredList.map(item => (
-                            <tr key={`${item._type}-${item.id}`} className="hover:bg-slate-50 transition-colors">
-                                <td className="px-6 py-4">
-                                    <span className="font-semibold text-slate-900">{item.name || '—'}</span>
-                                </td>
-                                <td className="px-6 py-4 text-sm text-slate-500">{item.email}</td>
-                                <td className="px-6 py-4">
-                                    {item._type === 'user' ? (
-                                        <select value={item.role} onChange={e => handleRoleChange(item.id, e.target.value)}
-                                            className={`text-xs font-bold px-3 py-1.5 rounded-full border-0 outline-none cursor-pointer ${
-                                                item.role === 'admin' ? 'bg-indigo-50 text-indigo-600' :
-                                                item.role === 'pending' ? 'bg-amber-50 text-amber-600' :
-                                                'bg-blue-50 text-blue-600'
-                                            }`}>
-                                            {tab === 'pending' && <option value="pending">待審核</option>}
-                                            <option value="teacher">講師</option>
-                                            <option value="admin">管理員</option>
-                                        </select>
-                                    ) : (
-                                        <select value={item.role} onChange={e => handleInviteRoleChange(item.id, e.target.value)}
-                                            className={`text-xs font-bold px-3 py-1.5 rounded-full border-0 outline-none cursor-pointer ${
-                                                item.role === 'admin' ? 'bg-indigo-50 text-indigo-600' : 'bg-blue-50 text-blue-600'
-                                            }`}>
-                                            <option value="teacher">講師</option>
-                                            <option value="admin">管理員</option>
-                                        </select>
+                        {filteredList.map(item => {
+                            const inst = item._type === 'user' ? instructorMap[item.id] : null;
+                            const isExpanded = showDetail && expandedId === `${item._type}-${item.id}`;
+                            const totalCols = 5 + (showMentorCol ? 1 : 0) + 1;
+                            return (
+                                <React.Fragment key={`${item._type}-${item.id}`}>
+                                    <tr className={`hover:bg-slate-50 transition-colors ${showDetail ? 'cursor-pointer' : ''}`}
+                                        onClick={() => showDetail && setExpandedId(isExpanded ? null : `${item._type}-${item.id}`)}>
+                                        <td className="px-6 py-4">
+                                            <span className="font-semibold text-slate-900">{item.name || '—'}</span>
+                                            {item._type === 'invite' && <span className="ml-2 text-[10px] bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded-full font-bold">尚未註冊</span>}
+                                        </td>
+                                        <td className="px-6 py-4 text-sm text-slate-500">{item.email}</td>
+                                        <td className="px-6 py-4" onClick={e => e.stopPropagation()}>
+                                            {item._type === 'user' ? (
+                                                <select value={item.role} onChange={e => handleRoleChange(item.id, e.target.value)}
+                                                    className={`text-xs font-bold px-3 py-1.5 rounded-full border-0 outline-none cursor-pointer ${
+                                                        item.role === 'admin' ? 'bg-indigo-50 text-indigo-600' :
+                                                        item.role === 'pending' ? 'bg-amber-50 text-amber-600' :
+                                                        'bg-blue-50 text-blue-600'
+                                                    }`}>
+                                                    {tab === 'pending' && <option value="pending">待審核</option>}
+                                                    <option value="teacher">講師</option>
+                                                    <option value="admin">管理員</option>
+                                                </select>
+                                            ) : (
+                                                <select value={item.role} onChange={e => handleInviteRoleChange(item.id, e.target.value)}
+                                                    className={`text-xs font-bold px-3 py-1.5 rounded-full border-0 outline-none cursor-pointer ${
+                                                        item.role === 'admin' ? 'bg-indigo-50 text-indigo-600' : 'bg-blue-50 text-blue-600'
+                                                    }`}>
+                                                    <option value="teacher">講師</option>
+                                                    <option value="admin">管理員</option>
+                                                </select>
+                                            )}
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            {inst?.instructor_role ? (
+                                                <span className="inline-flex items-center text-xs font-bold bg-purple-50 text-purple-600 px-2.5 py-1 rounded-full">
+                                                    {INSTRUCTOR_ROLE_LABELS[inst.instructor_role] || inst.instructor_role}
+                                                </span>
+                                            ) : (
+                                                <span className="text-xs text-slate-300">—</span>
+                                            )}
+                                        </td>
+                                        {showMentorCol && (
+                                            <td className="px-6 py-4" onClick={e => e.stopPropagation()}>
+                                                {item._type === 'user' ? (
+                                                    <select
+                                                        value={item.mentor_name || ''}
+                                                        onChange={e => handleMentorChange(item.id, e.target.value)}
+                                                        className={`text-sm w-32 px-3 py-2 rounded-lg outline-none cursor-pointer transition-colors ${
+                                                            item.mentor_name
+                                                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                                                : 'bg-slate-50 text-slate-400 border border-slate-200'
+                                                        }`}
+                                                    >
+                                                        <option value="">未指派</option>
+                                                        {mentorOptions.map(m => (
+                                                            <option key={m} value={m}>{m}</option>
+                                                        ))}
+                                                        <option value="__add_new__">＋ 新增輔導員</option>
+                                                    </select>
+                                                ) : (
+                                                    <span className="text-xs text-slate-300">—</span>
+                                                )}
+                                            </td>
+                                        )}
+                                        <td className="px-6 py-4 text-xs text-slate-400">
+                                            {new Date(item.created_at).toLocaleDateString()}
+                                        </td>
+                                        <td className="px-6 py-4 text-right" onClick={e => e.stopPropagation()}>
+                                            <div className="flex items-center justify-end gap-1">
+                                                {showDetail && (
+                                                    <button className="p-2 text-slate-400 hover:text-blue-600 transition-colors"
+                                                        onClick={() => setExpandedId(isExpanded ? null : `${item._type}-${item.id}`)}>
+                                                        {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                                                    </button>
+                                                )}
+                                                {item._type === 'user' && item.role === 'pending' && (
+                                                    <button onClick={() => handleRoleChange(item.id, 'teacher')}
+                                                        className="p-2 text-emerald-500 hover:text-emerald-700 transition-colors" title="核准為講師">
+                                                        <CheckCircle className="w-4 h-4" />
+                                                    </button>
+                                                )}
+                                                <button onClick={() => item._type === 'user' ? handleDeleteUser(item) : handleDeleteInvite(item.id)}
+                                                    className="p-2 text-slate-400 hover:text-red-500 transition-colors" title="移除">
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {isExpanded && inst && (
+                                        <tr>
+                                            <td colSpan={totalCols} className="px-6 py-5 bg-slate-50/70">
+                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
+                                                    <div className="space-y-2">
+                                                        <h4 className="font-bold text-slate-700 text-xs uppercase tracking-wider mb-2">基本資料</h4>
+                                                        <DetailRow label="性別" value={inst.gender} />
+                                                        <DetailRow label="出生年月日" value={inst.birth_date} />
+                                                        <DetailRow label="手機" value={inst.phone_mobile} />
+                                                        <DetailRow label="家電" value={inst.phone_home} />
+                                                        <DetailRow label="Line ID" value={inst.line_id} />
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <h4 className="font-bold text-slate-700 text-xs uppercase tracking-wider mb-2">聯絡與教學</h4>
+                                                        <DetailRow label="備用 Email" value={inst.email_secondary} />
+                                                        <DetailRow label="地址" value={inst.address} />
+                                                        <DetailRow label="學期接課" value={inst.teaching_freq_semester} />
+                                                        <DetailRow label="寒暑接課" value={inst.teaching_freq_vacation} />
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <h4 className="font-bold text-slate-700 text-xs uppercase tracking-wider mb-2">接課地區</h4>
+                                                        {inst.teaching_regions?.length > 0 ? (
+                                                            <div className="flex flex-wrap gap-1">
+                                                                {inst.teaching_regions.map(r => (
+                                                                    <span key={r} className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">{r}</span>
+                                                                ))}
+                                                            </div>
+                                                        ) : <span className="text-xs text-slate-400">未設定</span>}
+                                                        {inst.bio_notes && (
+                                                            <>
+                                                                <h4 className="font-bold text-slate-700 text-xs uppercase tracking-wider mt-3 mb-1">自我介紹</h4>
+                                                                <p className="text-slate-600 text-xs whitespace-pre-wrap line-clamp-4">{inst.bio_notes}</p>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </td>
+                                        </tr>
                                     )}
-                                </td>
-                                {showMentorCol && (
-                                    <td className="px-6 py-4">
-                                        {item._type === 'user' ? (
-                                            <select
-                                                value={item.mentor_name || ''}
-                                                onChange={e => handleMentorChange(item.id, e.target.value)}
-                                                className={`text-sm w-32 px-3 py-2 rounded-lg outline-none cursor-pointer transition-colors ${
-                                                    item.mentor_name
-                                                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                                        : 'bg-slate-50 text-slate-400 border border-slate-200'
-                                                }`}
-                                            >
-                                                <option value="">未指派</option>
-                                                {mentorOptions.map(m => (
-                                                    <option key={m} value={m}>{m}</option>
-                                                ))}
-                                                <option value="__add_new__">＋ 新增輔導員</option>
-                                            </select>
-                                        ) : (
-                                            <span className="text-xs text-slate-300">—</span>
-                                        )}
-                                    </td>
-                                )}
-                                <td className="px-6 py-4 text-xs text-slate-400">
-                                    {new Date(item.created_at).toLocaleDateString()}
-                                </td>
-                                <td className="px-6 py-4 text-right">
-                                    <div className="flex items-center justify-end gap-1">
-                                        {item._type === 'user' && item.role === 'pending' && (
-                                            <button onClick={() => handleRoleChange(item.id, 'teacher')}
-                                                className="p-2 text-emerald-500 hover:text-emerald-700 transition-colors" title="核准為講師">
-                                                <CheckCircle className="w-4 h-4" />
-                                            </button>
-                                        )}
-                                        <button onClick={() => item._type === 'user' ? handleDeleteUser(item) : handleDeleteInvite(item.id)}
-                                            className="p-2 text-slate-400 hover:text-red-500 transition-colors" title="移除">
-                                            <Trash2 className="w-4 h-4" />
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
-                        ))}
+                                    {isExpanded && !inst && (
+                                        <tr>
+                                            <td colSpan={totalCols} className="px-6 py-5 bg-slate-50/70 text-center text-sm text-slate-400">
+                                                此講師尚未填寫個人資料
+                                            </td>
+                                        </tr>
+                                    )}
+                                </React.Fragment>
+                            );
+                        })}
                         {filteredList.length === 0 && (
-                            <tr><td colSpan={showMentorCol ? 6 : 5} className="px-6 py-12 text-center text-slate-400">
+                            <tr><td colSpan={showMentorCol ? 7 : 6} className="px-6 py-12 text-center text-slate-400">
                                 {tab === 'pending' ? '目前沒有待審核的使用者' :
                                  tab === 'teacher' ? '目前沒有講師' : '目前沒有管理員'}
                             </td></tr>
@@ -441,6 +538,16 @@ const TeacherManager = () => {
                     </tbody>
                 </table>
             </div>
+        </div>
+    );
+};
+
+const DetailRow = ({ label, value }) => {
+    if (!value) return null;
+    return (
+        <div className="flex items-start gap-2">
+            <span className="text-slate-400 whitespace-nowrap min-w-[72px]">{label}：</span>
+            <span className="text-slate-700">{value}</span>
         </div>
     );
 };

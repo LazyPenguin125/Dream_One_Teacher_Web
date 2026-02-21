@@ -12,13 +12,16 @@ import AssignmentReview from './pages/admin/AssignmentReview';
 import TeacherManager from './pages/admin/TeacherManager';
 import ProgressOverview from './pages/admin/ProgressOverview';
 import AnnouncementManager from './pages/admin/AnnouncementManager';
+import AnnouncementDetail from './pages/AnnouncementDetail';
+import ProfilePage from './pages/ProfilePage';
+import InstructorList from './pages/admin/InstructorList';
 
-const ProtectedRoute = ({ children, adminOnly = false }) => {
+const ProtectedRoute = ({ children, adminOnly = false, allowPending = false }) => {
   const { user, profile, loading } = useAuth();
 
   if (loading) return <div className="p-12 text-center text-slate-500 text-lg">載入中...</div>;
   if (!user) return <Navigate to="/" />;
-  if (profile?.role === 'pending') return <Navigate to="/pending" />;
+  if (!allowPending && (!profile || profile.role === 'pending')) return <Navigate to="/pending" />;
   if (adminOnly && profile?.role !== 'admin') return <Navigate to="/" />;
 
   return children;
@@ -31,6 +34,15 @@ function App() {
         <Routes>
           <Route path="/" element={<Layout><HomePage /></Layout>} />
           <Route path="/pending" element={<Layout><PendingApproval /></Layout>} />
+          <Route path="/announcements/:id" element={<Layout><AnnouncementDetail /></Layout>} />
+          <Route
+            path="/profile"
+            element={
+              <ProtectedRoute allowPending>
+                <Layout><ProfilePage /></Layout>
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="/courses"
             element={
@@ -100,6 +112,14 @@ function App() {
             element={
               <ProtectedRoute adminOnly={true}>
                 <Layout><AnnouncementManager /></Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/instructors"
+            element={
+              <ProtectedRoute adminOnly={true}>
+                <Layout><InstructorList /></Layout>
               </ProtectedRoute>
             }
           />

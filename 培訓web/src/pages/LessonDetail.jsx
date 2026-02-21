@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
-import { ChevronLeft, ChevronRight, Play, FileText, CheckCircle, Circle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Play, FileText, CheckCircle, Circle, Image as ImageIcon } from 'lucide-react';
 
 // Strip HTML tags and return plain text preview
 const stripHtml = (html) => {
@@ -193,13 +193,21 @@ const LessonDetail = () => {
                         className="bg-white rounded-3xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-slate-100/80 overflow-hidden"
                     >
                         <div className="px-6 py-4 bg-slate-50/50 border-b border-slate-100/50 flex items-center gap-3">
-                            <div className={`p-2 rounded-xl ${item.type === 'video' ? 'bg-blue-100 text-blue-600' : 'bg-orange-100 text-orange-600'}`}>
-                                {item.type === 'video' ? <Play className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
+                            <div className={`p-2 rounded-xl ${
+                                item.type === 'video' ? 'bg-blue-100 text-blue-600' :
+                                item.type === 'image_text' ? 'bg-emerald-100 text-emerald-600' :
+                                'bg-orange-100 text-orange-600'
+                            }`}>
+                                {item.type === 'video' ? <Play className="w-4 h-4" /> :
+                                 item.type === 'image_text' ? <ImageIcon className="w-4 h-4" /> :
+                                 <FileText className="w-4 h-4" />}
                             </div>
                             <span className="text-sm font-black text-slate-700 uppercase tracking-wide">{item.title}</span>
                         </div>
                         <div className="p-8">
-                            {item.type === 'video' ? (
+                            {item.type === 'image_text' ? (
+                                <ImageTextContent item={item} />
+                            ) : item.type === 'video' ? (
                                 <div className="aspect-video bg-slate-900 rounded-2xl overflow-hidden shadow-2xl ring-1 ring-white/10">
                                     <iframe
                                         src={toEmbedUrl(item.video_url)}
@@ -210,7 +218,7 @@ const LessonDetail = () => {
                                 </div>
                             ) : (
                                 <div
-                                    className="prose prose-slate prose-lg max-w-none prose-headings:font-black prose-p:leading-relaxed prose-a:text-blue-600 font-medium text-slate-700 ql-editor"
+                                    className="prose prose-slate prose-lg max-w-none prose-headings:font-black prose-p:leading-relaxed prose-a:text-blue-600 font-medium text-slate-700 ql-editor lesson-content"
                                     dangerouslySetInnerHTML={{ __html: item.body }}
                                 />
                             )}
@@ -252,6 +260,25 @@ const LessonDetail = () => {
                 </div>
             </div>
 
+            <style dangerouslySetInnerHTML={{ __html: `
+                .lesson-content img {
+                    max-width: 100%;
+                    border-radius: 12px;
+                    display: inline-block;
+                    vertical-align: top;
+                }
+                .lesson-content iframe {
+                    max-width: 100%;
+                    border-radius: 12px;
+                    margin: 8px 0;
+                }
+                .lesson-content::after {
+                    content: '';
+                    display: block;
+                    clear: both;
+                }
+            `}} />
+
             {/* Prev / Next navigation */}
             <div className="flex items-center justify-between mt-12 gap-4">
                 {prevLesson ? (
@@ -279,6 +306,50 @@ const LessonDetail = () => {
                     </Link>
                 ) : <div />}
             </div>
+        </div>
+    );
+};
+
+const ImageTextContent = ({ item }) => {
+    let caption = '', captionLink = '';
+    try {
+        const parsed = JSON.parse(item.body || '{}');
+        caption = parsed.caption || '';
+        captionLink = parsed.captionLink || '';
+    } catch { /* body is not JSON, ignore */ }
+
+    const imgUrl = item.video_url
+        ? supabase.storage.from('content-images').getPublicUrl(item.video_url).data?.publicUrl
+        : null;
+
+    return (
+        <div className="flex flex-col items-center">
+            {imgUrl && (
+                <img
+                    src={imgUrl}
+                    alt={caption || item.title}
+                    className="max-w-full rounded-2xl shadow-md"
+                />
+            )}
+            {caption && (
+                <div className="mt-4 text-center">
+                    {captionLink ? (
+                        <a
+                            href={captionLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:text-blue-800 font-medium underline underline-offset-2 transition-colors"
+                        >
+                            {caption}
+                        </a>
+                    ) : (
+                        <p className="text-slate-600 font-medium">{caption}</p>
+                    )}
+                </div>
+            )}
+            {!imgUrl && !caption && (
+                <p className="text-slate-400 text-sm">此區塊尚無內容</p>
+            )}
         </div>
     );
 };

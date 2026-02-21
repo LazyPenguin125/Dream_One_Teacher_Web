@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
 const AuthContext = createContext({});
@@ -7,38 +7,25 @@ export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [profile, setProfile] = useState(null);
     const [loading, setLoading] = useState(true);
+    const profileFetchedRef = useRef(false);
 
     useEffect(() => {
-        // 超時保護：最多等 6 秒，否則強制結束 loading
         const timeoutId = setTimeout(() => {
             console.warn('Auth loading timeout — forcing loading=false');
             setLoading(false);
         }, 6000);
 
-        const getSession = async () => {
-            try {
-                const { data: { session }, error } = await supabase.auth.getSession();
-                if (error) console.warn('getSession error:', error.message);
-                setUser(session?.user ?? null);
-                if (session?.user) {
-                    await fetchProfile(session.user.id);
-                }
-            } catch (err) {
-                console.error('getSession threw:', err);
-            } finally {
-                clearTimeout(timeoutId);
-                setLoading(false);
-            }
-        };
-
-        getSession();
-
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+            console.log('Auth event:', _event, session?.user?.id);
             setUser(session?.user ?? null);
             if (session?.user) {
-                await fetchProfile(session.user.id);
+                if (!profileFetchedRef.current || _event === 'SIGNED_IN') {
+                    profileFetchedRef.current = true;
+                    await fetchProfile(session.user.id);
+                }
             } else {
                 setProfile(null);
+                profileFetchedRef.current = false;
             }
             clearTimeout(timeoutId);
             setLoading(false);
@@ -102,8 +89,17 @@ export const AuthProvider = ({ children }) => {
                     }
                 }
 
-                console.log('Defaulting to pending');
-                setProfile({ role: 'pending' });
+                console.log('No invite found, creating pending user entry...');
+                const { error: createErr } = await supabase.from('users').insert({
+                    id: userId,
+                    name: currentUser?.user_metadata?.full_name || null,
+                    email: email || currentUser?.email,
+                    role: 'pending',
+                });
+                if (createErr && !createErr.message?.includes('duplicate')) {
+                    console.warn('Failed to create user entry:', createErr.message);
+                }
+                setProfile({ id: userId, email, role: 'pending' });
             }
         } catch (err) {
             console.error('Fetch error:', err);

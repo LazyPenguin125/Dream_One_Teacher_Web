@@ -1,39 +1,50 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabaseClient';
-import { LogIn, LogOut, BookOpen, LayoutDashboard } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { LogIn, LogOut, BookOpen, LayoutDashboard, UserCircle } from 'lucide-react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 
 const Layout = ({ children }) => {
-    const { user, profile, signInWithGoogle, signOut, refreshProfile } = useAuth();
+    const { user, profile, loading, signInWithGoogle, signOut, refreshProfile } = useAuth();
+    const navigate = useNavigate();
+    const location = useLocation();
+
+    useEffect(() => {
+        if (loading || !user) return;
+        if (profile?.role === 'pending') {
+            const path = location.pathname;
+            if (path !== '/profile' && path !== '/pending' && !path.startsWith('/announcements')) {
+                navigate('/pending', { replace: true });
+            }
+        }
+    }, [loading, user, profile, navigate, location.pathname]);
 
     return (
         <div className="min-h-screen flex flex-col">
             <header className="bg-white border-b border-slate-200">
                 <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
                     <Link to="/" className="flex items-center gap-2 font-bold text-xl text-blue-600">
-                        <div
-                            role="img"
-                            aria-label="夢想一號 Logo"
-                            style={{
-                                width: 40,
-                                height: 40,
-                                flexShrink: 0,
-                                backgroundImage: 'url(/logo.png)',
-                                backgroundSize: '120% auto',
-                                backgroundPosition: 'center 5%',
-                                backgroundRepeat: 'no-repeat',
-                            }}
-                        />
-                        教師培訓平台
+                        <img src="/logo.png" alt="夢想一號 Logo" className="w-9 h-9 object-contain" />
+                        講師資源站
                     </Link>
 
                     <nav className="flex items-center gap-6">
                         {user ? (
                             <>
-                                {profile?.role !== 'pending' && (
+                                {profile && profile.role !== 'pending' ? (
                                     <Link to="/courses" className="text-slate-600 hover:text-blue-600 font-medium">我的課程</Link>
+                                ) : (
+                                    <button
+                                        onClick={() => alert('權限尚未開啟，如資料已填寫完，請通知夢想一號管理員協助開啟權限')}
+                                        className="text-slate-400 hover:text-slate-500 font-medium cursor-pointer"
+                                    >
+                                        我的課程
+                                    </button>
                                 )}
+                                <Link to="/profile" className="flex items-center gap-1 text-slate-600 hover:text-blue-600 font-medium">
+                                    <UserCircle className="w-4 h-4" />
+                                    個人資料
+                                </Link>
                                 {profile?.role === 'admin' && (
                                     <Link to="/admin" className="flex items-center gap-1 text-slate-600 hover:text-blue-600 font-medium">
                                         <LayoutDashboard className="w-4 h-4" />
@@ -73,7 +84,7 @@ const Layout = ({ children }) => {
 
             <footer className="bg-white border-t border-slate-200 py-8">
                 <div className="max-w-7xl mx-auto px-4 text-center text-slate-500 text-sm">
-                    © 2026 教師培訓學習與進度追蹤平台. All rights reserved.
+                    Copyright 2026 夢想一號文化教育股份有限公司, all rights reserved.
                 </div>
             </footer>
             {user && <DebugRoleChecker userId={user.id} />}
@@ -83,6 +94,7 @@ const Layout = ({ children }) => {
 
 const LoginForm = () => {
     const { signInWithGoogle, signInWithEmail, signUpWithEmail } = useAuth();
+    const navigate = useNavigate();
     const [isLogin, setIsLogin] = useState(true);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -94,12 +106,21 @@ const LoginForm = () => {
             if (isLogin) {
                 await signInWithEmail(email, password);
             } else {
-                await signUpWithEmail(email, password, name);
-                alert('註冊成功！請直接登入。');
-                setIsLogin(true);
+                const data = await signUpWithEmail(email, password, name);
+                if (data?.user?.identities?.length === 0) {
+                    alert('此帳號已註冊過，請直接使用登入功能。');
+                    setIsLogin(true);
+                    return;
+                }
+                navigate('/profile');
             }
         } catch (error) {
-            alert(error.message);
+            if (error.message?.includes('already registered')) {
+                alert('此帳號已註冊過，請直接使用登入功能。');
+                setIsLogin(true);
+            } else {
+                alert(error.message);
+            }
         }
     };
 

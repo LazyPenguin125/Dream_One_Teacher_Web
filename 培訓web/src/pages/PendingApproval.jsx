@@ -1,12 +1,34 @@
+import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { supabase } from '../lib/supabaseClient';
 import { Clock, LogOut, RefreshCw } from 'lucide-react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 
 const PendingApproval = () => {
     const { user, profile, signOut, refreshProfile } = useAuth();
+    const navigate = useNavigate();
+    const [checking, setChecking] = useState(true);
+
+    useEffect(() => {
+        if (!user) return;
+        const checkProfile = async () => {
+            const { data } = await supabase
+                .from('instructors')
+                .select('id')
+                .eq('user_id', user.id)
+                .maybeSingle();
+            if (!data) {
+                navigate('/profile', { replace: true });
+            } else {
+                setChecking(false);
+            }
+        };
+        checkProfile();
+    }, [user, navigate]);
 
     if (!user) return <Navigate to="/" />;
     if (profile?.role && profile.role !== 'pending') return <Navigate to="/courses" />;
+    if (checking) return <div className="p-12 text-center text-slate-500 text-lg">載入中...</div>;
 
     const handleRefresh = async () => {
         await refreshProfile(user.id);
@@ -21,7 +43,7 @@ const PendingApproval = () => {
 
                 <h1 className="text-2xl font-black text-slate-900 mb-3">帳號審核中</h1>
                 <p className="text-slate-500 mb-2">
-                    你的帳號已成功註冊，目前正在等待管理員審核。
+                    你的帳號已成功註冊並完成資料填寫，目前正在等待管理員審核。
                 </p>
                 <p className="text-slate-400 text-sm mb-8">
                     審核通過後即可瀏覽所有培訓課程內容。
@@ -51,6 +73,12 @@ const PendingApproval = () => {
                     >
                         <RefreshCw className="w-4 h-4" />
                         重新檢查狀態
+                    </button>
+                    <button
+                        onClick={() => navigate('/profile')}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-50 transition-all"
+                    >
+                        編輯個人資料
                     </button>
                     <button
                         onClick={signOut}
