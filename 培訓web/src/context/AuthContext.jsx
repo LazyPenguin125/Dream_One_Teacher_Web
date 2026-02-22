@@ -12,27 +12,29 @@ export const AuthProvider = ({ children }) => {
     const profileFetchedRef = useRef(false);
 
     useEffect(() => {
+        // 安全逾時保護：10 秒後強制解除 loading
         const timeoutId = setTimeout(() => {
             console.warn('Auth loading timeout — forcing loading=false');
             setLoading(false);
-        }, 15000);
+        }, 10000);
 
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
             console.log('Auth event:', _event, session?.user?.id);
             setUser(session?.user ?? null);
             if (session?.user) {
                 if (!profileFetchedRef.current || _event === 'SIGNED_IN') {
                     profileFetchedRef.current = true;
-                    await fetchProfile(session.user.id);
+                    // 不 await，讓 fetchProfile 背景執行，避免 AbortError 卡住
+                    fetchProfile(session.user.id);
                 }
             } else {
                 setProfile(null);
                 setInstructorProfile(null);
                 setAvatarUrl(null);
                 profileFetchedRef.current = false;
+                clearTimeout(timeoutId);
+                setLoading(false);
             }
-            clearTimeout(timeoutId);
-            setLoading(false);
         });
 
         return () => {
@@ -48,6 +50,8 @@ export const AuthProvider = ({ children }) => {
             return;
         }
         try {
+            // 短暫延遲讓 Supabase session 穩定
+            await new Promise(r => setTimeout(r, 100));
             const { data, error } = await supabase
                 .from('users')
                 .select('*')
@@ -55,10 +59,8 @@ export const AuthProvider = ({ children }) => {
                 .maybeSingle();
 
             if (error) {
-                if (!error.message?.includes('aborted')) {
-                    console.warn('Profile fetch error:', error.message);
-                }
-                // Stop! Do not fall through to default logic if there was an error
+                console.warn('Profile fetch error:', error.message);
+                // AbortError 或其他錯誤都在 finally 裡解除 loading
                 return;
             }
 
