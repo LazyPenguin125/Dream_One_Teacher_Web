@@ -262,22 +262,22 @@ const TeacherManager = () => {
     if (loading) return <div className="p-12 text-center text-slate-500">載入中...</div>;
 
     return (
-        <div className="p-8 max-w-6xl mx-auto">
-            <div className="flex items-center justify-between mb-8">
+        <div className="p-4 sm:p-8 max-w-6xl mx-auto">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
                 <div>
-                    <h1 className="text-3xl font-black text-slate-900">講師名單管理</h1>
-                    <p className="text-slate-500 mt-1">審核新註冊使用者與管理講師名單</p>
+                    <h1 className="text-2xl sm:text-3xl font-black text-slate-900">講師名單管理</h1>
+                    <p className="text-slate-500 mt-1 text-sm">審核新註冊使用者與管理講師名單</p>
                 </div>
                 <button
                     onClick={() => setShowForm(!showForm)}
-                    className="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20"
+                    className="bg-blue-600 text-white px-5 py-2.5 sm:px-6 sm:py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20 text-sm sm:text-base"
                 >
                     <UserPlus className="w-5 h-5" /> 新增講師
                 </button>
             </div>
 
             {/* Stats */}
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-8">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-8">
                 <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-3">
                     <div className="w-10 h-10 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center"><Clock className="w-5 h-5" /></div>
                     <div>
@@ -391,8 +391,165 @@ const TeacherManager = () => {
                 </div>
             )}
 
-            {/* Table */}
-            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+            {/* ===== 手機版：卡片列表 ===== */}
+            <div className="md:hidden space-y-3">
+                {filteredList.length === 0 && (
+                    <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center text-slate-400">
+                        {tab === 'pending' ? '目前沒有待審核的使用者' :
+                         tab === 'teacher' ? '目前沒有講師' :
+                         tab === 'mentor' ? '目前沒有輔導員' : '目前沒有管理員'}
+                    </div>
+                )}
+                {filteredList.map(item => {
+                    const inst = item._type === 'user' ? instructorMap[item.id] : null;
+                    const isExpanded = showDetail && expandedId === `${item._type}-${item.id}`;
+                    return (
+                        <div key={`m-${item._type}-${item.id}`} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                            <div className="p-4 space-y-3"
+                                onClick={() => showDetail && setExpandedId(isExpanded ? null : `${item._type}-${item.id}`)}>
+                                {/* 姓名 + 操作按鈕 */}
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <span className="font-bold text-slate-900">{item.name || '—'}</span>
+                                        {item._type === 'invite' && <span className="text-[10px] bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded-full font-bold">尚未註冊</span>}
+                                    </div>
+                                    <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                                        {showDetail && (
+                                            <button className="p-1.5 text-slate-400 hover:text-blue-600"
+                                                onClick={() => setExpandedId(isExpanded ? null : `${item._type}-${item.id}`)}>
+                                                {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                                            </button>
+                                        )}
+                                        {item._type === 'user' && item.role === 'pending' && (
+                                            <button onClick={() => handleRoleChange(item.id, 'teacher')}
+                                                className="p-1.5 text-emerald-500 hover:text-emerald-700" title="核准為講師">
+                                                <CheckCircle className="w-4 h-4" />
+                                            </button>
+                                        )}
+                                        <button onClick={() => item._type === 'user' ? handleDeleteUser(item) : handleDeleteInvite(item.id)}
+                                            className="p-1.5 text-slate-400 hover:text-red-500" title="移除">
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                </div>
+                                {/* Email */}
+                                <div className="text-sm text-slate-500 truncate">{item.email}</div>
+                                {/* 下拉選單列 */}
+                                <div className="flex flex-wrap gap-2" onClick={e => e.stopPropagation()}>
+                                    {/* 身份 */}
+                                    {item._type === 'user' ? (
+                                        <select value={item.role} onChange={e => handleRoleChange(item.id, e.target.value)}
+                                            className={`text-xs font-bold px-3 py-1.5 rounded-full border-0 outline-none ${
+                                                item.role === 'admin' ? 'bg-indigo-50 text-indigo-600' :
+                                                item.role === 'mentor' ? 'bg-teal-50 text-teal-600' :
+                                                item.role === 'pending' ? 'bg-amber-50 text-amber-600' :
+                                                'bg-blue-50 text-blue-600'
+                                            }`}>
+                                            {tab === 'pending' && <option value="pending">待審核</option>}
+                                            <option value="teacher">講師</option>
+                                            <option value="mentor">輔導員</option>
+                                            <option value="admin">管理員</option>
+                                        </select>
+                                    ) : (
+                                        <select value={item.role} onChange={e => handleInviteRoleChange(item.id, e.target.value)}
+                                            className={`text-xs font-bold px-3 py-1.5 rounded-full border-0 outline-none ${
+                                                item.role === 'admin' ? 'bg-indigo-50 text-indigo-600' :
+                                                item.role === 'mentor' ? 'bg-teal-50 text-teal-600' :
+                                                'bg-blue-50 text-blue-600'
+                                            }`}>
+                                            <option value="teacher">講師</option>
+                                            <option value="mentor">輔導員</option>
+                                            <option value="admin">管理員</option>
+                                        </select>
+                                    )}
+                                    {/* 講師等級 */}
+                                    {item._type === 'user' && (
+                                        <select
+                                            value={inst?.instructor_role || ''}
+                                            onChange={async (e) => {
+                                                const newRole = e.target.value || null;
+                                                let error;
+                                                if (inst) {
+                                                    ({ error } = await supabase.from('instructors').update({ instructor_role: newRole }).eq('user_id', item.id));
+                                                } else {
+                                                    ({ error } = await supabase.from('instructors').upsert({
+                                                        user_id: item.id, full_name: item.name || '', email_primary: item.email || '',
+                                                        instructor_role: newRole, teaching_regions: [],
+                                                    }, { onConflict: 'user_id' }));
+                                                }
+                                                if (error) { alert('講師等級變更失敗：' + error.message); return; }
+                                                setInstructorMap(prev => ({ ...prev, [item.id]: { ...(prev[item.id] || {}), user_id: item.id, instructor_role: newRole } }));
+                                            }}
+                                            className={`text-xs font-bold px-2.5 py-1.5 rounded-full border-0 outline-none ${
+                                                inst?.instructor_role ? 'bg-purple-50 text-purple-600' : 'bg-slate-50 text-slate-400'
+                                            }`}
+                                        >
+                                            <option value="">等級未設定</option>
+                                            {Object.entries(INSTRUCTOR_ROLE_LABELS).map(([k, v]) => (
+                                                <option key={k} value={k}>{v}</option>
+                                            ))}
+                                        </select>
+                                    )}
+                                    {/* 輔導員 */}
+                                    {showMentorCol && item._type === 'user' && (
+                                        <select
+                                            value={item.mentor_name || ''}
+                                            onChange={e => handleMentorChange(item.id, e.target.value)}
+                                            className={`text-xs px-2.5 py-1.5 rounded-full outline-none ${
+                                                item.mentor_name ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-50 text-slate-400 border border-slate-200'
+                                            }`}
+                                        >
+                                            <option value="">輔導員未指派</option>
+                                            {mentorOptions.map(m => (<option key={m} value={m}>{m}</option>))}
+                                            <option value="__add_new__">＋ 新增輔導員</option>
+                                        </select>
+                                    )}
+                                </div>
+                                {/* 日期 */}
+                                <div className="text-[11px] text-slate-400">{new Date(item.created_at).toLocaleDateString()}</div>
+                            </div>
+                            {/* 展開詳細 */}
+                            {isExpanded && inst && (
+                                <div className="border-t border-slate-100 p-4 bg-slate-50/70 space-y-4">
+                                    <div className="space-y-1.5 text-sm">
+                                        <h4 className="font-bold text-slate-700 text-xs uppercase tracking-wider">基本資料</h4>
+                                        <DetailRow label="性別" value={inst.gender} />
+                                        <DetailRow label="生日" value={inst.birth_date} />
+                                        <DetailRow label="手機" value={inst.phone_mobile} />
+                                        <DetailRow label="家電" value={inst.phone_home} />
+                                        <DetailRow label="Line" value={inst.line_id} />
+                                    </div>
+                                    <div className="space-y-1.5 text-sm">
+                                        <h4 className="font-bold text-slate-700 text-xs uppercase tracking-wider">聯絡與教學</h4>
+                                        <DetailRow label="備用 Email" value={inst.email_secondary} />
+                                        <DetailRow label="地址" value={inst.address} />
+                                        <DetailRow label="學期接課" value={inst.teaching_freq_semester} />
+                                        <DetailRow label="寒暑接課" value={inst.teaching_freq_vacation} />
+                                    </div>
+                                    <div className="space-y-1.5 text-sm">
+                                        <h4 className="font-bold text-slate-700 text-xs uppercase tracking-wider">接課地區</h4>
+                                        {inst.teaching_regions?.length > 0 ? (
+                                            <div className="flex flex-wrap gap-1">
+                                                {inst.teaching_regions.map(r => (
+                                                    <span key={r} className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">{r}</span>
+                                                ))}
+                                            </div>
+                                        ) : <span className="text-xs text-slate-400">未設定</span>}
+                                    </div>
+                                </div>
+                            )}
+                            {isExpanded && !inst && (
+                                <div className="border-t border-slate-100 p-4 bg-slate-50/70 text-center text-sm text-slate-400">
+                                    此講師尚未填寫個人資料
+                                </div>
+                            )}
+                        </div>
+                    );
+                })}
+            </div>
+
+            {/* ===== 桌面版：表格 ===== */}
+            <div className="hidden md:block bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
                 <table className="w-full text-left">
                     <thead className="bg-slate-50 text-slate-400 text-xs font-bold uppercase tracking-wider">
                         <tr>
@@ -454,29 +611,15 @@ const TeacherManager = () => {
                                                         const newRole = e.target.value || null;
                                                         let error;
                                                         if (inst) {
-                                                            ({ error } = await supabase
-                                                                .from('instructors')
-                                                                .update({ instructor_role: newRole })
-                                                                .eq('user_id', item.id));
+                                                            ({ error } = await supabase.from('instructors').update({ instructor_role: newRole }).eq('user_id', item.id));
                                                         } else {
-                                                            ({ error } = await supabase
-                                                                .from('instructors')
-                                                                .upsert({
-                                                                    user_id: item.id,
-                                                                    full_name: item.name || '',
-                                                                    email_primary: item.email || '',
-                                                                    instructor_role: newRole,
-                                                                    teaching_regions: [],
-                                                                }, { onConflict: 'user_id' }));
+                                                            ({ error } = await supabase.from('instructors').upsert({
+                                                                user_id: item.id, full_name: item.name || '', email_primary: item.email || '',
+                                                                instructor_role: newRole, teaching_regions: [],
+                                                            }, { onConflict: 'user_id' }));
                                                         }
-                                                        if (error) {
-                                                            alert('講師等級變更失敗：' + error.message);
-                                                            return;
-                                                        }
-                                                        setInstructorMap(prev => ({
-                                                            ...prev,
-                                                            [item.id]: { ...(prev[item.id] || {}), user_id: item.id, instructor_role: newRole }
-                                                        }));
+                                                        if (error) { alert('講師等級變更失敗：' + error.message); return; }
+                                                        setInstructorMap(prev => ({ ...prev, [item.id]: { ...(prev[item.id] || {}), user_id: item.id, instructor_role: newRole } }));
                                                     }}
                                                     className={`text-xs font-bold px-2.5 py-1.5 rounded-full border-0 outline-none cursor-pointer ${
                                                         inst?.instructor_role ? 'bg-purple-50 text-purple-600' : 'bg-slate-50 text-slate-400'
