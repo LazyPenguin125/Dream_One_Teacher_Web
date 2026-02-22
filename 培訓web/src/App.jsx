@@ -1,4 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Layout from './components/Layout';
 import HomePage from './pages/HomePage';
@@ -17,15 +18,25 @@ import ProfilePage from './pages/ProfilePage';
 import InstructorList from './pages/admin/InstructorList';
 
 const ProtectedRoute = ({ children, adminOnly = false, staffOnly = false, allowPending = false }) => {
-  const { user, profile, loading } = useAuth();
+  const { user, profile, loading, refreshProfile } = useAuth();
+
+  // 若 loading 結束但 profile 仍為 null（AbortError 後），自動觸發重試
+  useEffect(() => {
+    if (!loading && user && !profile) {
+      console.log('Profile null after loading, refreshing...');
+      refreshProfile(user.id);
+    }
+  }, [loading, user, profile]);
 
   if (loading) return <div className="p-12 text-center text-slate-500 text-lg">載入中...</div>;
   if (!user) return <Navigate to="/" />;
-  // 有登入的 user 但 profile 還沒載完（網路慢），繼續等待而非跳轉
-  if (user && !profile) return <div className="p-12 text-center text-slate-500 text-lg">載入中...</div>;
-  if (!allowPending && profile.role === 'pending') return <Navigate to="/pending" />;
-  if (adminOnly && profile?.role !== 'admin') return <Navigate to="/" />;
-  if (staffOnly && profile?.role !== 'admin' && profile?.role !== 'mentor') return <Navigate to="/" />;
+  // 有登入的 user 但 profile 還沒載完，繼續等待
+  if (!profile) return <div className="p-12 text-center text-slate-500 text-lg">載入中...</div>;
+  // admin 和 mentor 永遠不被擋
+  const isPrivileged = profile.role === 'admin' || profile.role === 'mentor';
+  if (!allowPending && !isPrivileged && profile.role === 'pending') return <Navigate to="/pending" />;
+  if (adminOnly && profile.role !== 'admin') return <Navigate to="/" />;
+  if (staffOnly && profile.role !== 'admin' && profile.role !== 'mentor') return <Navigate to="/" />;
 
   return children;
 };

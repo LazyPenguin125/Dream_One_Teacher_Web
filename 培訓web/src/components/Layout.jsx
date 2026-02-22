@@ -25,9 +25,10 @@ const Layout = ({ children }) => {
     const location = useLocation();
 
     useEffect(() => {
-        if (loading || !user) return;
-        // admin 和 mentor 不受 pending 限制
-        if (profile?.role === 'pending' && profile?.role !== 'admin' && profile?.role !== 'mentor') {
+        if (loading || !user || !profile) return;
+        // admin 和 mentor 不受 pending 限制，只有真正的 pending 才轉址
+        const isPrivileged = profile.role === 'admin' || profile.role === 'mentor';
+        if (!isPrivileged && profile.role === 'pending') {
             const path = location.pathname;
             if (path !== '/profile' && path !== '/pending' && !path.startsWith('/announcements')) {
                 navigate('/pending', { replace: true });

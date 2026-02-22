@@ -44,14 +44,15 @@ export const AuthProvider = ({ children }) => {
     }, []);
 
 
-    const fetchProfile = async (userId) => {
+    const fetchProfile = async (userId, retryCount = 0) => {
         if (!userId) {
             setLoading(false);
             return;
         }
+        let shouldRetry = false;
         try {
             // 短暫延遲讓 Supabase session 穩定
-            await new Promise(r => setTimeout(r, 100));
+            await new Promise(r => setTimeout(r, retryCount === 0 ? 300 : 800 * retryCount));
             const { data, error } = await supabase
                 .from('users')
                 .select('*')
@@ -59,8 +60,13 @@ export const AuthProvider = ({ children }) => {
                 .maybeSingle();
 
             if (error) {
+                const isAbortError = error.message?.toLowerCase().includes('abort') || error.message?.toLowerCase().includes('signal');
+                if (isAbortError && retryCount < 3) {
+                    console.warn(`Profile fetch aborted, retrying (${retryCount + 1}/3)...`);
+                    shouldRetry = true;
+                    return;
+                }
                 console.warn('Profile fetch error:', error.message);
-                // AbortError 或其他錯誤都在 finally 裡解除 loading
                 return;
             }
 
@@ -142,9 +148,20 @@ export const AuthProvider = ({ children }) => {
                 setProfile({ id: userId, email, role: 'pending' });
             }
         } catch (err) {
+            const isAbortErr = err?.name === 'AbortError' || err?.message?.toLowerCase().includes('abort');
+            if (isAbortErr && retryCount < 3) {
+                console.warn(`Profile fetch caught AbortError, retrying (${retryCount + 1}/3)...`);
+                shouldRetry = true;
+                return;
+            }
             console.error('Fetch error:', err);
         } finally {
-            setLoading(false);
+            if (shouldRetry) {
+                // 延遲後重試，維持 loading=true 狀態
+                setTimeout(() => fetchProfile(userId, retryCount + 1), 800);
+            } else {
+                setLoading(false);
+            }
         }
     };
 
