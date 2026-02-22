@@ -63,7 +63,7 @@ const HomePage = () => {
     }, []);
 
     return (
-        <div className="min-h-screen">
+        <div className="min-h-screen overflow-x-hidden">
             {/* ══════════ HERO ══════════ */}
             <section className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-blue-950 to-indigo-950 text-white">
                 <div className="absolute inset-0">
@@ -72,21 +72,21 @@ const HomePage = () => {
                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-amber-500/5 rounded-full blur-3xl" />
                 </div>
 
-                <div className="relative max-w-6xl mx-auto px-6 py-24 lg:py-32">
-                    <div className="flex flex-col lg:flex-row items-center gap-12">
+                <div className="relative max-w-6xl mx-auto px-4 sm:px-6 py-16 sm:py-24 lg:py-32">
+                    <div className="flex flex-col lg:flex-row items-center gap-8 lg:gap-12">
                         <div className="flex-1 text-center lg:text-left">
-                            <div className="inline-flex items-center gap-2 px-4 py-1.5 mb-6 text-sm font-bold tracking-wide text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-full">
+                            <div className="inline-flex items-center gap-2 px-3 sm:px-4 py-1.5 mb-6 text-xs sm:text-sm font-bold tracking-wide text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-full">
                                 <Sparkles className="w-4 h-4" />
                                 夢想一號魔術方塊學院
                             </div>
-                            <h1 className="text-4xl lg:text-6xl font-black leading-tight mb-6">
+                            <h1 className="text-3xl sm:text-4xl lg:text-6xl font-black leading-tight mb-6">
                                 提升教學專業
                                 <br />
                                 <span className="bg-gradient-to-r from-amber-300 to-yellow-400 bg-clip-text text-transparent">
                                     啟發無限潛力
                                 </span>
                             </h1>
-                            <p className="text-lg text-blue-100/80 mb-4 leading-relaxed max-w-xl">
+                            <p className="text-base sm:text-lg text-blue-100/80 mb-4 leading-relaxed max-w-xl">
                                 不是為了教而教，而是我們透過魔術方塊也對教育有所貢獻。
                             </p>
                             <p className="text-base text-blue-200/60 mb-10 max-w-xl font-medium">
@@ -211,7 +211,7 @@ const HomePage = () => {
                             <Target className="w-4 h-4" />
                             願景與使命
                         </div>
-                        <h2 className="text-3xl font-black text-slate-900 mb-4">
+                        <h2 className="text-2xl sm:text-3xl font-black text-slate-900 mb-4">
                             你辦不到你相信不了的事情
                         </h2>
                         <p className="text-slate-500 max-w-2xl mx-auto">
@@ -274,7 +274,7 @@ const HomePage = () => {
                             <Users className="w-4 h-4" />
                             我們的團隊
                         </div>
-                        <h2 className="text-3xl font-black text-slate-900 mb-4">
+                        <h2 className="text-2xl sm:text-3xl font-black text-slate-900 mb-4">
                             玩的不只是魔術方塊，更是五顏六色的夢想
                         </h2>
                         <p className="text-slate-500 max-w-2xl mx-auto">
@@ -308,7 +308,7 @@ const HomePage = () => {
             {/* ══════════ CTA ══════════ */}
             <section className="py-20 bg-white">
                 <div className="max-w-4xl mx-auto px-6">
-                    <div className="relative bg-gradient-to-br from-slate-900 via-blue-950 to-indigo-950 rounded-3xl p-12 lg:p-16 text-center overflow-hidden">
+                    <div className="relative bg-gradient-to-br from-slate-900 via-blue-950 to-indigo-950 rounded-3xl p-8 sm:p-12 lg:p-16 text-center overflow-hidden">
                         <div className="absolute top-0 left-0 w-64 h-64 bg-amber-400/10 rounded-full -translate-x-1/2 -translate-y-1/2 blur-3xl" />
                         <div className="absolute bottom-0 right-0 w-48 h-48 bg-blue-400/10 rounded-full translate-x-1/2 translate-y-1/2 blur-3xl" />
 
@@ -317,7 +317,7 @@ const HomePage = () => {
                                 <Star className="w-4 h-4" />
                                 準備好了嗎？
                             </div>
-                            <h2 className="text-3xl lg:text-4xl font-black text-white mb-4">
+                            <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white mb-4">
                                 開始你的教師培訓之旅
                             </h2>
                             <p className="text-blue-200/70 mb-10 max-w-lg mx-auto">

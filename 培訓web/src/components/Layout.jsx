@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabaseClient';
-import { LogIn, LogOut, BookOpen, LayoutDashboard, UserCircle, Bell, Check, CheckCheck, Megaphone, Star, ThumbsUp } from 'lucide-react';
+import { LogIn, LogOut, BookOpen, LayoutDashboard, UserCircle, Bell, Check, CheckCheck, Megaphone, Star, ThumbsUp, Menu, X } from 'lucide-react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 
 const ROLE_LABELS = { admin: '管理員', mentor: '輔導員', teacher: '講師', pending: '待審核' };
@@ -23,10 +23,10 @@ const Layout = ({ children }) => {
     const { user, profile, instructorProfile, avatarUrl, loading, signOut } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
+    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
     useEffect(() => {
         if (loading || !user || !profile) return;
-        // admin 和 mentor 不受 pending 限制，只有真正的 pending 才轉址
         const isPrivileged = profile.role === 'admin' || profile.role === 'mentor';
         if (!isPrivileged && profile.role === 'pending') {
             const path = location.pathname;
@@ -36,18 +36,22 @@ const Layout = ({ children }) => {
         }
     }, [loading, user, profile, navigate, location.pathname]);
 
+    // 路由切換時關閉手機選單
+    useEffect(() => { setMobileMenuOpen(false); }, [location.pathname]);
+
     const displayName = instructorProfile?.nickname || instructorProfile?.full_name || profile?.name || user?.email?.split('@')[0] || '';
 
     return (
-        <div className="min-h-screen flex flex-col">
-            <header className="bg-white border-b border-slate-200">
+        <div className="min-h-screen flex flex-col overflow-x-hidden">
+            <header className="bg-white border-b border-slate-200 relative z-50">
                 <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
-                    <Link to="/" className="flex items-center gap-2 font-bold text-xl text-blue-600">
+                    <Link to="/" className="flex items-center gap-2 font-bold text-xl text-blue-600 shrink-0">
                         <img src="/logo.png" alt="夢想一號 Logo" className="w-9 h-9 object-contain" />
-                        講師資源站
+                        <span className="hidden sm:inline">講師資源站</span>
                     </Link>
 
-                    <nav className="flex items-center gap-5">
+                    {/* 桌面版導航 */}
+                    <nav className="hidden md:flex items-center gap-5">
                         {user ? (
                             <>
                                 {profile && profile.role !== 'pending' ? (
@@ -115,7 +119,91 @@ const Layout = ({ children }) => {
                             <LoginForm />
                         )}
                     </nav>
+
+                    {/* 手機版：通知 + 漢堡按鈕 */}
+                    <div className="flex md:hidden items-center gap-2">
+                        {user && profile && profile.role !== 'pending' && (
+                            <NotificationBell userId={user.id} />
+                        )}
+                        <button
+                            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                            className="p-2 text-slate-600 hover:text-blue-600"
+                        >
+                            {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+                        </button>
+                    </div>
                 </div>
+
+                {/* 手機版展開選單 */}
+                {mobileMenuOpen && (
+                    <div className="md:hidden bg-white border-t border-slate-100 shadow-lg">
+                        <div className="px-4 py-4 space-y-1">
+                            {user ? (
+                                <>
+                                    {/* 使用者資訊 */}
+                                    <Link to="/profile" className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 mb-3">
+                                        <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-slate-200 shrink-0">
+                                            {avatarUrl ? (
+                                                <img src={avatarUrl} alt="大頭貼" className="w-full h-full object-cover" />
+                                            ) : (
+                                                <PenguinAvatar />
+                                            )}
+                                        </div>
+                                        <div>
+                                            <div className="font-bold text-slate-800 text-sm">{displayName}</div>
+                                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                                                profile?.role === 'admin' ? 'bg-indigo-50 text-indigo-600' :
+                                                profile?.role === 'mentor' ? 'bg-teal-50 text-teal-600' :
+                                                profile?.role === 'pending' ? 'bg-amber-50 text-amber-600' :
+                                                'bg-blue-50 text-blue-600'
+                                            }`}>
+                                                {ROLE_LABELS[profile?.role] || profile?.role}
+                                            </span>
+                                        </div>
+                                    </Link>
+
+                                    {/* 導航連結 */}
+                                    {profile && profile.role !== 'pending' ? (
+                                        <Link to="/courses" className="flex items-center gap-3 px-3 py-3 text-slate-700 hover:bg-blue-50 hover:text-blue-600 rounded-xl font-medium text-sm">
+                                            <BookOpen className="w-5 h-5" />
+                                            我的課程
+                                        </Link>
+                                    ) : (
+                                        <button
+                                            onClick={() => { alert('權限尚未開啟，如資料已填寫完，請通知夢想一號管理員協助開啟權限'); setMobileMenuOpen(false); }}
+                                            className="flex items-center gap-3 px-3 py-3 text-slate-400 rounded-xl font-medium text-sm w-full text-left"
+                                        >
+                                            <BookOpen className="w-5 h-5" />
+                                            我的課程
+                                        </button>
+                                    )}
+                                    <Link to="/profile" className="flex items-center gap-3 px-3 py-3 text-slate-700 hover:bg-blue-50 hover:text-blue-600 rounded-xl font-medium text-sm">
+                                        <UserCircle className="w-5 h-5" />
+                                        個人資料
+                                    </Link>
+                                    {(profile?.role === 'admin' || profile?.role === 'mentor') && (
+                                        <Link to="/admin" className="flex items-center gap-3 px-3 py-3 text-slate-700 hover:bg-blue-50 hover:text-blue-600 rounded-xl font-medium text-sm">
+                                            <LayoutDashboard className="w-5 h-5" />
+                                            後台管理
+                                        </Link>
+                                    )}
+
+                                    <div className="border-t border-slate-100 pt-2 mt-2">
+                                        <button
+                                            onClick={() => { signOut(); setMobileMenuOpen(false); }}
+                                            className="flex items-center gap-3 px-3 py-3 text-red-500 hover:bg-red-50 rounded-xl font-medium text-sm w-full"
+                                        >
+                                            <LogOut className="w-5 h-5" />
+                                            登出
+                                        </button>
+                                    </div>
+                                </>
+                            ) : (
+                                <MobileLoginForm onDone={() => setMobileMenuOpen(false)} />
+                            )}
+                        </div>
+                    </div>
+                )}
             </header>
 
             <main className="flex-1 max-w-7xl mx-auto w-full">
@@ -223,7 +311,7 @@ const NotificationBell = ({ userId }) => {
             </button>
 
             {open && (
-                <div className="absolute right-0 top-full mt-2 w-96 bg-white rounded-2xl border border-slate-200 shadow-2xl z-50 overflow-hidden">
+                <div className="absolute right-0 top-full mt-2 w-80 sm:w-96 bg-white rounded-2xl border border-slate-200 shadow-2xl z-50 overflow-hidden max-w-[calc(100vw-2rem)]">
                     <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
                         <h3 className="font-bold text-slate-900">通知</h3>
                         {unreadCount > 0 && (
@@ -328,7 +416,7 @@ const LoginForm = () => {
                 <input
                     type="email"
                     placeholder="信箱"
-                    className="px-3 py-1.5 border rounded-lg text-sm bg-white"
+                    className="px-3 py-1.5 border rounded-lg text-sm bg-white w-36"
                     value={email}
                     onChange={e => setEmail(e.target.value)}
                     required
@@ -336,30 +424,99 @@ const LoginForm = () => {
                 <input
                     type="password"
                     placeholder="密碼"
-                    className="px-3 py-1.5 border rounded-lg text-sm w-32 bg-white"
+                    className="px-3 py-1.5 border rounded-lg text-sm w-28 bg-white"
                     value={password}
                     onChange={e => setPassword(e.target.value)}
                     required
                 />
-                <button type="submit" className="bg-blue-600 text-white px-4 py-1.5 rounded-lg hover:bg-blue-700 text-sm font-bold transition-all">
+                <button type="submit" className="bg-blue-600 text-white px-4 py-1.5 rounded-lg hover:bg-blue-700 text-sm font-bold transition-all whitespace-nowrap">
                     {isLogin ? '登入' : '註冊'}
                 </button>
             </form>
             <button
                 onClick={() => setIsLogin(!isLogin)}
-                className="text-xs text-slate-400 hover:text-blue-600 underline"
+                className="text-xs text-slate-400 hover:text-blue-600 underline whitespace-nowrap"
             >
                 {isLogin ? '切換註冊' : '切換登入'}
             </button>
-            <div className="w-px h-4 bg-slate-200 mx-2" />
-            <button
-                onClick={signInWithGoogle}
-                className="text-slate-400 hover:text-blue-600 p-1 transition-colors"
-                title="Google 登入 (暫不可用)"
-            >
-                <LogIn className="w-5 h-5" />
-            </button>
         </div>
+    );
+};
+
+const MobileLoginForm = ({ onDone }) => {
+    const { signInWithEmail, signUpWithEmail } = useAuth();
+    const navigate = useNavigate();
+    const [isLogin, setIsLogin] = useState(true);
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [name, setName] = useState('');
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        try {
+            if (isLogin) {
+                await signInWithEmail(email, password);
+                onDone?.();
+            } else {
+                const data = await signUpWithEmail(email, password, name);
+                if (data?.user?.identities?.length === 0) {
+                    alert('此帳號已註冊過，請直接使用登入功能。');
+                    setIsLogin(true);
+                    return;
+                }
+                onDone?.();
+                navigate('/profile');
+            }
+        } catch (error) {
+            if (error.message?.includes('already registered')) {
+                alert('此帳號已註冊過，請直接使用登入功能。');
+                setIsLogin(true);
+            } else {
+                alert(error.message);
+            }
+        }
+    };
+
+    return (
+        <form onSubmit={handleSubmit} className="space-y-3">
+            <div className="text-sm font-bold text-slate-700 mb-1">{isLogin ? '登入帳號' : '註冊帳號'}</div>
+            {!isLogin && (
+                <input
+                    type="text"
+                    placeholder="姓名"
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm bg-white"
+                    value={name}
+                    onChange={e => setName(e.target.value)}
+                    required
+                />
+            )}
+            <input
+                type="email"
+                placeholder="信箱"
+                className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm bg-white"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                required
+            />
+            <input
+                type="password"
+                placeholder="密碼"
+                className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm bg-white"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                required
+            />
+            <button type="submit" className="w-full bg-blue-600 text-white py-3 rounded-xl hover:bg-blue-700 text-sm font-bold transition-all">
+                {isLogin ? '登入' : '註冊'}
+            </button>
+            <button
+                type="button"
+                onClick={() => setIsLogin(!isLogin)}
+                className="w-full text-center text-xs text-slate-400 hover:text-blue-600 py-2"
+            >
+                {isLogin ? '還沒有帳號？切換到註冊' : '已有帳號？切換到登入'}
+            </button>
+        </form>
     );
 };
 
