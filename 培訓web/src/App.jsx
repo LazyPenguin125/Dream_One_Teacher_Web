@@ -1,5 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Layout from './components/Layout';
 import HomePage from './pages/HomePage';
@@ -19,11 +19,13 @@ import InstructorList from './pages/admin/InstructorList';
 
 const ProtectedRoute = ({ children, adminOnly = false, staffOnly = false, allowPending = false }) => {
   const { user, profile, loading, refreshProfile } = useAuth();
+  const retryCountRef = useRef(0);
 
-  // 若 loading 結束但 profile 仍為 null（AbortError 後），自動觸發重試
+  // 若 loading 結束但 profile 仍為 null，最多重試 2 次
   useEffect(() => {
-    if (!loading && user && !profile) {
-      console.log('Profile null after loading, refreshing...');
+    if (!loading && user && !profile && retryCountRef.current < 2) {
+      retryCountRef.current += 1;
+      console.log(`Profile null after loading, refreshing (attempt ${retryCountRef.current})...`);
       refreshProfile(user.id);
     }
   }, [loading, user, profile]);

@@ -12,33 +12,56 @@ export const AuthProvider = ({ children }) => {
     const profileFetchedRef = useRef(false);
 
     useEffect(() => {
-        // 安全逾時保護：10 秒後強制解除 loading
-        const timeoutId = setTimeout(() => {
-            console.warn('Auth loading timeout — forcing loading=false');
-            setLoading(false);
-        }, 10000);
+        let isMounted = true;
 
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-            console.log('Auth event:', _event, session?.user?.id);
-            setUser(session?.user ?? null);
-            if (session?.user) {
-                if (!profileFetchedRef.current || _event === 'SIGNED_IN') {
+        // 用 getSession 做初始載入，避免 onAuthStateChange 觸發兩次造成 AbortError
+        const initializeAuth = async () => {
+            try {
+                const { data: { session } } = await supabase.auth.getSession();
+                if (!isMounted) return;
+                if (session?.user) {
+                    setUser(session.user);
                     profileFetchedRef.current = true;
-                    // 不 await，讓 fetchProfile 背景執行，避免 AbortError 卡住
+                    await fetchProfile(session.user.id);
+                } else {
+                    setLoading(false);
+                }
+            } catch (err) {
+                console.error('Init auth error:', err);
+                if (isMounted) setLoading(false);
+            }
+        };
+
+        initializeAuth();
+
+        // 只監聽後續的 SIGNED_IN / SIGNED_OUT，不處理 INITIAL_SESSION
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+            if (!isMounted) return;
+            if (_event === 'INITIAL_SESSION') return; // 已由 getSession 處理
+
+            console.log('Auth event:', _event, session?.user?.id);
+
+            if (_event === 'SIGNED_IN' && session?.user) {
+                setUser(session.user);
+                // 只有尚未 fetch 過，或真的是新登入才重新 fetch
+                if (!profileFetchedRef.current) {
+                    profileFetchedRef.current = true;
                     fetchProfile(session.user.id);
                 }
-            } else {
+            } else if (_event === 'SIGNED_OUT') {
+                setUser(null);
                 setProfile(null);
                 setInstructorProfile(null);
                 setAvatarUrl(null);
                 profileFetchedRef.current = false;
-                clearTimeout(timeoutId);
                 setLoading(false);
+            } else if (_event === 'TOKEN_REFRESHED' && session?.user) {
+                setUser(session.user);
             }
         });
 
         return () => {
-            clearTimeout(timeoutId);
+            isMounted = false;
             subscription.unsubscribe();
         };
     }, []);
