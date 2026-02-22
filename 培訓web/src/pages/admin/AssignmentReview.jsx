@@ -250,12 +250,12 @@ const AssignmentReview = () => {
     if (loading) return <div className="p-12 text-center text-slate-500">載入中...</div>;
 
     return (
-        <div className="p-8 max-w-7xl mx-auto">
-            <h1 className="text-3xl font-black text-slate-900 mb-2">作業審核中心</h1>
+        <div className="p-4 sm:p-8 max-w-7xl mx-auto">
+            <h1 className="text-2xl sm:text-3xl font-black text-slate-900 mb-2">作業審核中心</h1>
             <p className="text-slate-500 mb-8">依輔導員或講師查看並給予作業回饋</p>
 
             {/* Filter bar */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-4 mb-6 shadow-sm flex flex-wrap items-center gap-4">
+            <div className="bg-white rounded-2xl border border-slate-200 p-4 mb-6 shadow-sm flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
                 <div className="flex items-center gap-2">
                     <Filter className="w-4 h-4 text-slate-400" />
                     <select
@@ -278,7 +278,7 @@ const AssignmentReview = () => {
                     <option value="pending">待審核</option>
                     <option value="reviewed">已回饋</option>
                 </select>
-                <div className="flex-1 min-w-[200px] relative">
+                <div className="flex-1 min-w-0 sm:min-w-[200px] relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
                     <input
                         type="text"
@@ -290,9 +290,8 @@ const AssignmentReview = () => {
                 </div>
             </div>
 
-            <div className="flex gap-6">
-                {/* Left: Teacher list */}
-                <div className="w-80 shrink-0 space-y-2 max-h-[calc(100vh-240px)] overflow-y-auto pr-1">
+            <div className="flex flex-col lg:flex-row gap-6">
+                <div className="w-full lg:w-80 lg:shrink-0 space-y-2 max-h-none lg:max-h-[calc(100vh-240px)] overflow-y-auto pr-1">
                     {filteredTeacherIds.length === 0 ? (
                         <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
                             <User className="w-8 h-8 text-slate-200 mx-auto mb-2" />
@@ -352,12 +351,12 @@ const AssignmentReview = () => {
                 </div>
 
                 {/* Right: Assignment details */}
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0 w-full">
                     {!selectedUserId ? (
                         <div className="h-full flex items-center justify-center text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200 min-h-[400px]">
                             <div className="text-center">
                                 <GraduationCap className="w-12 h-12 text-slate-200 mx-auto mb-3" />
-                                <p className="font-medium">請從左側選擇一位講師</p>
+                                <p className="font-medium"><span className="lg:hidden">請從上方選擇一位講師</span><span className="hidden lg:inline">請從左側選擇一位講師</span></p>
                                 <p className="text-sm mt-1">查看其繳交的作業並給予回饋</p>
                             </div>
                         </div>

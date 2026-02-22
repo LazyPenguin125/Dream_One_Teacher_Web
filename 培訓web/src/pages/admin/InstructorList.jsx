@@ -61,13 +61,27 @@ const InstructorList = () => {
 
     const docCount = (inst) => DOC_KEYS.filter(d => inst[`${d.key}_path`]).length;
 
+    const handleRoleChange = async (inst, newRole) => {
+        const { error } = await supabase
+            .from('instructors')
+            .update({ instructor_role: newRole || null })
+            .eq('id', inst.id);
+        if (error) {
+            alert('講師等級變更失敗：' + error.message);
+            return;
+        }
+        setInstructors(prev => prev.map(i =>
+            i.id === inst.id ? { ...i, instructor_role: newRole || null } : i
+        ));
+    };
+
     if (loading) return <div className="p-12 text-center text-slate-500">載入中...</div>;
 
     return (
-        <div className="p-8">
+        <div className="p-4 sm:p-8">
             <div className="flex items-center justify-between mb-8">
                 <div>
-                    <h1 className="text-3xl font-black text-slate-900">講師資料總覽</h1>
+                    <h1 className="text-2xl sm:text-3xl font-black text-slate-900">講師資料總覽</h1>
                     <p className="text-slate-500 mt-1">共 {instructors.length} 位講師已填寫資料</p>
                 </div>
             </div>
@@ -83,7 +97,28 @@ const InstructorList = () => {
                 />
             </div>
 
-            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+            <div className="block md:hidden space-y-3">
+                {filtered.length === 0 ? (
+                    <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center text-slate-400">
+                        {search ? '找不到符合的講師' : '尚無講師資料'}
+                    </div>
+                ) : (
+                    filtered.map(inst => (
+                        <InstructorCard
+                            key={inst.id}
+                            inst={inst}
+                            expanded={expandedId === inst.id}
+                            onToggle={() => toggleExpand(inst)}
+                            urls={signedUrls[inst.id] || {}}
+                            docCount={docCount(inst)}
+                            isAdmin={isAdmin}
+                            onRoleChange={(newRole) => handleRoleChange(inst, newRole)}
+                        />
+                    ))
+                )}
+            </div>
+
+            <div className="hidden md:block bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
                 <table className="w-full text-left">
                     <thead className="bg-slate-50 text-slate-400 text-xs font-bold uppercase tracking-wider">
                         <tr>
@@ -105,19 +140,7 @@ const InstructorList = () => {
                                 urls={signedUrls[inst.id] || {}}
                                 docCount={docCount(inst)}
                                 isAdmin={isAdmin}
-                                onRoleChange={async (newRole) => {
-                                    const { error } = await supabase
-                                        .from('instructors')
-                                        .update({ instructor_role: newRole || null })
-                                        .eq('id', inst.id);
-                                    if (error) {
-                                        alert('講師等級變更失敗：' + error.message);
-                                        return;
-                                    }
-                                    setInstructors(prev => prev.map(i =>
-                                        i.id === inst.id ? { ...i, instructor_role: newRole || null } : i
-                                    ));
-                                }}
+                                onRoleChange={(newRole) => handleRoleChange(inst, newRole)}
                             />
                         ))}
                         {filtered.length === 0 && (
@@ -133,6 +156,121 @@ const InstructorList = () => {
         </div>
     );
 };
+
+const InstructorExpandedContent = ({ inst, urls }) => (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="space-y-3">
+            <h3 className="font-bold text-slate-900 text-sm">基本資料</h3>
+            <InfoRow label="出生年月日" value={inst.birth_date} />
+            <InfoRow label="身分證字號" value={inst.id_number ? '••••••' + inst.id_number.slice(-4) : null} />
+            <InfoRow label="手機" value={inst.phone_mobile} />
+            <InfoRow label="家電" value={inst.phone_home} />
+            <InfoRow label="Line ID" value={inst.line_id} />
+            <InfoRow label="地址" value={inst.address} />
+            <InfoRow label="備用 Email" value={inst.email_secondary} />
+
+            <h3 className="font-bold text-slate-900 text-sm pt-3">教學資訊</h3>
+            <InfoRow label="接課頻率（學期）" value={inst.teaching_freq_semester} />
+            <InfoRow label="接課頻率（寒暑假）" value={inst.teaching_freq_vacation} />
+            <div>
+                <span className="text-xs text-slate-400">接課地區：</span>
+                <div className="flex flex-wrap gap-1 mt-1">
+                    {inst.teaching_regions?.map(r => (
+                        <span key={r} className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">{r}</span>
+                    ))}
+                </div>
+            </div>
+
+            {inst.bio_notes && (
+                <>
+                    <h3 className="font-bold text-slate-900 text-sm pt-3">經歷 / 自我介紹</h3>
+                    <p className="text-sm text-slate-600 whitespace-pre-wrap">{inst.bio_notes}</p>
+                </>
+            )}
+        </div>
+
+        <div>
+            <h3 className="font-bold text-slate-900 text-sm mb-3">上傳文件</h3>
+            <div className="grid grid-cols-2 gap-3">
+                {DOC_KEYS.map(({ key, label }) => (
+                    <div key={key} className="border border-slate-200 rounded-xl p-3">
+                        <div className="text-xs font-medium text-slate-500 mb-2">{label}</div>
+                        {urls[key] ? (
+                            <a href={urls[key]} target="_blank" rel="noopener noreferrer"
+                                className="block group">
+                                <img src={urls[key]} alt={label} className="w-full h-24 object-cover rounded-lg" />
+                                <div className="flex items-center gap-1 text-xs text-blue-500 mt-1 group-hover:underline">
+                                    <ExternalLink className="w-3 h-3" /> 開啟原圖
+                                </div>
+                            </a>
+                        ) : (
+                            <div className="w-full h-24 bg-slate-100 rounded-lg flex items-center justify-center text-xs text-slate-400">
+                                未上傳
+                            </div>
+                        )}
+                    </div>
+                ))}
+            </div>
+        </div>
+    </div>
+);
+
+const InstructorCard = ({ inst, expanded, onToggle, urls, docCount, isAdmin, onRoleChange }) => (
+    <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+        <div
+            className="p-4 flex items-start gap-3 cursor-pointer hover:bg-slate-50 transition-colors"
+            onClick={onToggle}
+        >
+            <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2">
+                    <span className="font-bold text-slate-900 truncate">{inst.full_name}</span>
+                    {inst.gender && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 shrink-0">{inst.gender}</span>
+                    )}
+                </div>
+                <div className="text-sm text-slate-500 mt-0.5 truncate">{inst.email_primary}</div>
+                <div className="flex flex-wrap items-center gap-1.5 mt-2" onClick={e => e.stopPropagation()}>
+                    {isAdmin ? (
+                        <select
+                            value={inst.instructor_role || ''}
+                            onChange={e => onRoleChange(e.target.value)}
+                            className={`text-xs font-bold px-2.5 py-1 rounded-full border-0 outline-none cursor-pointer ${
+                                inst.instructor_role ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-50 text-slate-400'
+                            }`}
+                        >
+                            <option value="">未設定</option>
+                            {Object.entries(ROLE_LABELS).map(([k, v]) => (
+                                <option key={k} value={k}>{v}</option>
+                            ))}
+                        </select>
+                    ) : inst.instructor_role ? (
+                        <span className="inline-flex items-center text-xs font-bold bg-indigo-50 text-indigo-600 px-2.5 py-1 rounded-full">
+                            {ROLE_LABELS[inst.instructor_role] || inst.instructor_role}
+                        </span>
+                    ) : (
+                        <span className="text-xs text-slate-400">未設定</span>
+                    )}
+                    <span className="inline-flex items-center gap-1 text-xs text-slate-500">
+                        <MapPin className="w-3 h-3" />
+                        {inst.teaching_regions?.length || 0} 個縣市
+                    </span>
+                    <span className={`inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full ${docCount === 4 ? 'bg-green-50 text-green-600' : docCount > 0 ? 'bg-yellow-50 text-yellow-600' : 'bg-slate-100 text-slate-400'}`}>
+                        <FileImage className="w-3 h-3" />
+                        {docCount}/4
+                    </span>
+                </div>
+            </div>
+            <button className="shrink-0 text-slate-400 hover:text-blue-600 transition-colors p-1">
+                {expanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+            </button>
+        </div>
+        {expanded && (
+            <div className="px-4 pb-4 pt-0 bg-slate-50/50">
+                <InstructorExpandedContent inst={inst} urls={urls} />
+            </div>
+        )}
+    </div>
+);
 
 const InstructorRow = ({ inst, expanded, onToggle, urls, docCount, isAdmin, onRoleChange }) => (
     <>
@@ -186,61 +324,7 @@ const InstructorRow = ({ inst, expanded, onToggle, urls, docCount, isAdmin, onRo
         {expanded && (
             <tr>
                 <td colSpan={6} className="px-6 py-6 bg-slate-50/50">
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        <div className="space-y-3">
-                            <h3 className="font-bold text-slate-900 text-sm">基本資料</h3>
-                            <InfoRow label="出生年月日" value={inst.birth_date} />
-                            <InfoRow label="身分證字號" value={inst.id_number ? '••••••' + inst.id_number.slice(-4) : null} />
-                            <InfoRow label="手機" value={inst.phone_mobile} />
-                            <InfoRow label="家電" value={inst.phone_home} />
-                            <InfoRow label="Line ID" value={inst.line_id} />
-                            <InfoRow label="地址" value={inst.address} />
-                            <InfoRow label="備用 Email" value={inst.email_secondary} />
-
-                            <h3 className="font-bold text-slate-900 text-sm pt-3">教學資訊</h3>
-                            <InfoRow label="接課頻率（學期）" value={inst.teaching_freq_semester} />
-                            <InfoRow label="接課頻率（寒暑假）" value={inst.teaching_freq_vacation} />
-                            <div>
-                                <span className="text-xs text-slate-400">接課地區：</span>
-                                <div className="flex flex-wrap gap-1 mt-1">
-                                    {inst.teaching_regions?.map(r => (
-                                        <span key={r} className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">{r}</span>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {inst.bio_notes && (
-                                <>
-                                    <h3 className="font-bold text-slate-900 text-sm pt-3">經歷 / 自我介紹</h3>
-                                    <p className="text-sm text-slate-600 whitespace-pre-wrap">{inst.bio_notes}</p>
-                                </>
-                            )}
-                        </div>
-
-                        <div>
-                            <h3 className="font-bold text-slate-900 text-sm mb-3">上傳文件</h3>
-                            <div className="grid grid-cols-2 gap-3">
-                                {DOC_KEYS.map(({ key, label }) => (
-                                    <div key={key} className="border border-slate-200 rounded-xl p-3">
-                                        <div className="text-xs font-medium text-slate-500 mb-2">{label}</div>
-                                        {urls[key] ? (
-                                            <a href={urls[key]} target="_blank" rel="noopener noreferrer"
-                                                className="block group">
-                                                <img src={urls[key]} alt={label} className="w-full h-24 object-cover rounded-lg" />
-                                                <div className="flex items-center gap-1 text-xs text-blue-500 mt-1 group-hover:underline">
-                                                    <ExternalLink className="w-3 h-3" /> 開啟原圖
-                                                </div>
-                                            </a>
-                                        ) : (
-                                            <div className="w-full h-24 bg-slate-100 rounded-lg flex items-center justify-center text-xs text-slate-400">
-                                                未上傳
-                                            </div>
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
+                    <InstructorExpandedContent inst={inst} urls={urls} />
                 </td>
             </tr>
         )}
