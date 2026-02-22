@@ -13,42 +13,30 @@ export const AuthProvider = ({ children }) => {
 
     useEffect(() => {
         let isMounted = true;
+        let debounceTimer = null;
 
-        // 用 getSession 做初始載入，避免 onAuthStateChange 觸發兩次造成 AbortError
-        const initializeAuth = async () => {
-            try {
-                const { data: { session } } = await supabase.auth.getSession();
-                if (!isMounted) return;
-                if (session?.user) {
-                    setUser(session.user);
-                    profileFetchedRef.current = true;
-                    await fetchProfile(session.user.id);
-                } else {
-                    setLoading(false);
-                }
-            } catch (err) {
-                console.error('Init auth error:', err);
-                if (isMounted) setLoading(false);
-            }
+        // 用 debounce 防止 INITIAL_SESSION + SIGNED_IN 同時觸發造成 AbortError
+        const scheduleFetch = (userId) => {
+            if (debounceTimer) clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => {
+                if (isMounted) fetchProfile(userId);
+            }, 250);
         };
 
-        initializeAuth();
-
-        // 只監聽後續的 SIGNED_IN / SIGNED_OUT，不處理 INITIAL_SESSION
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
             if (!isMounted) return;
-            if (_event === 'INITIAL_SESSION') return; // 已由 getSession 處理
-
             console.log('Auth event:', _event, session?.user?.id);
 
-            if (_event === 'SIGNED_IN' && session?.user) {
-                setUser(session.user);
-                // 只有尚未 fetch 過，或真的是新登入才重新 fetch
-                if (!profileFetchedRef.current) {
-                    profileFetchedRef.current = true;
-                    fetchProfile(session.user.id);
+            if (_event === 'INITIAL_SESSION' || _event === 'SIGNED_IN') {
+                if (session?.user) {
+                    setUser(session.user);
+                    scheduleFetch(session.user.id);
+                } else if (_event === 'INITIAL_SESSION') {
+                    // 沒有 session，直接解除 loading
+                    setLoading(false);
                 }
             } else if (_event === 'SIGNED_OUT') {
+                if (debounceTimer) clearTimeout(debounceTimer);
                 setUser(null);
                 setProfile(null);
                 setInstructorProfile(null);
@@ -62,6 +50,7 @@ export const AuthProvider = ({ children }) => {
 
         return () => {
             isMounted = false;
+            if (debounceTimer) clearTimeout(debounceTimer);
             subscription.unsubscribe();
         };
     }, []);
