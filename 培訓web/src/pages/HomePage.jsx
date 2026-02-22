@@ -83,7 +83,7 @@ const HomePage = () => {
                                 提升教學專業
                                 <br />
                                 <span className="bg-gradient-to-r from-amber-300 to-yellow-400 bg-clip-text text-transparent">
-                                    成就未來名師
+                                    啟發無限潛力
                                 </span>
                             </h1>
                             <p className="text-lg text-blue-100/80 mb-4 leading-relaxed max-w-xl">
@@ -129,11 +129,11 @@ const HomePage = () => {
                                 <div className="text-sm text-blue-200/60 font-medium">培訓教師人數</div>
                             </div>
                             <div>
-                                <div className="text-3xl font-black text-amber-400 mb-1">50+</div>
-                                <div className="text-sm text-blue-200/60 font-medium">合作教育機構</div>
+                                <div className="text-3xl font-black text-amber-400 mb-1">300+</div>
+                                <div className="text-sm text-blue-200/60 font-medium">合作過的單位</div>
                             </div>
                             <div>
-                                <div className="text-3xl font-black text-amber-400 mb-1">10,000+</div>
+                                <div className="text-3xl font-black text-amber-400 mb-1">30,000+</div>
                                 <div className="text-sm text-blue-200/60 font-medium">受惠學生人數</div>
                             </div>
                         </div>
