@@ -112,11 +112,15 @@ const TeacherManager = () => {
             }
 
             const isolated = createIsolatedClient();
-            const { data: signUpData, error: signUpErr } = await isolated.auth.signUp({
+            const signUpPromise = isolated.auth.signUp({
                 email: form.email,
                 password: form.password,
                 options: { data: { full_name: form.name } },
             });
+            const timeout = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('操作逾時（超過 20 秒），請確認 Supabase Auth 設定或稍後再試')), 20000)
+            );
+            const { data: signUpData, error: signUpErr } = await Promise.race([signUpPromise, timeout]);
 
             if (signUpErr) {
                 if (signUpErr.message.includes('rate limit')) {
