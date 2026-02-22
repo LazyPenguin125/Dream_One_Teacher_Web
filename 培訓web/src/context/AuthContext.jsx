@@ -63,6 +63,20 @@ export const AuthProvider = ({ children }) => {
             }
 
             if (data) {
+                // 如果現有 role 是 pending，檢查是否有 teacher_invites 可以升級
+                if (data.role === 'pending') {
+                    const { data: invite } = await supabase
+                        .from('teacher_invites')
+                        .select('role')
+                        .eq('email', data.email)
+                        .maybeSingle();
+                    if (invite && invite.role && invite.role !== 'pending') {
+                        await supabase.from('users').update({ role: invite.role }).eq('id', userId);
+                        await supabase.from('teacher_invites').delete().eq('email', data.email);
+                        data = { ...data, role: invite.role };
+                        console.log('Role upgraded from invite:', invite.role);
+                    }
+                }
                 console.log('Profile fetched:', data.role);
                 setProfile(data);
                 // Fetch instructor profile for display name & avatar

@@ -26,7 +26,8 @@ const Layout = ({ children }) => {
 
     useEffect(() => {
         if (loading || !user) return;
-        if (profile?.role === 'pending') {
+        // admin 和 mentor 不受 pending 限制
+        if (profile?.role === 'pending' && profile?.role !== 'admin' && profile?.role !== 'mentor') {
             const path = location.pathname;
             if (path !== '/profile' && path !== '/pending' && !path.startsWith('/announcements')) {
                 navigate('/pending', { replace: true });
