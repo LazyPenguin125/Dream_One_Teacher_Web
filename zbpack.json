@@ -1,0 +1,4 @@
+{
+  "build_command": "cd '培訓web' && npm install && npm run build",
+  "start_command": "cd '培訓web' && npm start"
+}
