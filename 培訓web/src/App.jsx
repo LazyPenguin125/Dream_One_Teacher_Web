@@ -16,13 +16,14 @@ import AnnouncementDetail from './pages/AnnouncementDetail';
 import ProfilePage from './pages/ProfilePage';
 import InstructorList from './pages/admin/InstructorList';
 
-const ProtectedRoute = ({ children, adminOnly = false, allowPending = false }) => {
+const ProtectedRoute = ({ children, adminOnly = false, staffOnly = false, allowPending = false }) => {
   const { user, profile, loading } = useAuth();
 
   if (loading) return <div className="p-12 text-center text-slate-500 text-lg">載入中...</div>;
   if (!user) return <Navigate to="/" />;
   if (!allowPending && (!profile || profile.role === 'pending')) return <Navigate to="/pending" />;
   if (adminOnly && profile?.role !== 'admin') return <Navigate to="/" />;
+  if (staffOnly && profile?.role !== 'admin' && profile?.role !== 'mentor') return <Navigate to="/" />;
 
   return children;
 };
@@ -70,7 +71,7 @@ function App() {
           <Route
             path="/admin"
             element={
-              <ProtectedRoute adminOnly={true}>
+              <ProtectedRoute staffOnly={true}>
                 <Layout><AdminDashboard /></Layout>
               </ProtectedRoute>
             }
@@ -78,7 +79,7 @@ function App() {
           <Route
             path="/admin/cms/:courseId"
             element={
-              <ProtectedRoute adminOnly={true}>
+              <ProtectedRoute staffOnly={true}>
                 <Layout><CMSManager /></Layout>
               </ProtectedRoute>
             }
@@ -86,7 +87,7 @@ function App() {
           <Route
             path="/admin/assignments"
             element={
-              <ProtectedRoute adminOnly={true}>
+              <ProtectedRoute staffOnly={true}>
                 <Layout><AssignmentReview /></Layout>
               </ProtectedRoute>
             }
@@ -102,7 +103,7 @@ function App() {
           <Route
             path="/admin/progress"
             element={
-              <ProtectedRoute adminOnly={true}>
+              <ProtectedRoute staffOnly={true}>
                 <Layout><ProgressOverview /></Layout>
               </ProtectedRoute>
             }
@@ -118,7 +119,7 @@ function App() {
           <Route
             path="/admin/instructors"
             element={
-              <ProtectedRoute adminOnly={true}>
+              <ProtectedRoute staffOnly={true}>
                 <Layout><InstructorList /></Layout>
               </ProtectedRoute>
             }

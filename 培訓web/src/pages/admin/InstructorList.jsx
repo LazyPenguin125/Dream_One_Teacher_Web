@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabaseClient';
+import { useAuth } from '../../context/AuthContext';
 import { Search, ChevronDown, ChevronUp, ExternalLink, FileImage, MapPin } from 'lucide-react';
 
-const ROLE_LABELS = { S: 'S 級', 'A+': 'A+ 級', A: 'A 級', B: 'B 級', '實習': '實習' };
+const ROLE_LABELS = { S: 'S 級', 'A+': 'A+ 級', A: 'A 級', B: 'B 級', '實習': '實習', '職員': '職員', '工讀生': '工讀生' };
 const DOC_KEYS = [
     { key: 'id_front', label: '身分證正面' },
     { key: 'id_back', label: '身分證反面' },
@@ -11,6 +12,8 @@ const DOC_KEYS = [
 ];
 
 const InstructorList = () => {
+    const { profile } = useAuth();
+    const isAdmin = profile?.role === 'admin';
     const [instructors, setInstructors] = useState([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
@@ -101,6 +104,20 @@ const InstructorList = () => {
                                 onToggle={() => toggleExpand(inst)}
                                 urls={signedUrls[inst.id] || {}}
                                 docCount={docCount(inst)}
+                                isAdmin={isAdmin}
+                                onRoleChange={async (newRole) => {
+                                    const { error } = await supabase
+                                        .from('instructors')
+                                        .update({ instructor_role: newRole || null })
+                                        .eq('id', inst.id);
+                                    if (error) {
+                                        alert('講師等級變更失敗：' + error.message);
+                                        return;
+                                    }
+                                    setInstructors(prev => prev.map(i =>
+                                        i.id === inst.id ? { ...i, instructor_role: newRole || null } : i
+                                    ));
+                                }}
                             />
                         ))}
                         {filtered.length === 0 && (
@@ -117,7 +134,7 @@ const InstructorList = () => {
     );
 };
 
-const InstructorRow = ({ inst, expanded, onToggle, urls, docCount }) => (
+const InstructorRow = ({ inst, expanded, onToggle, urls, docCount, isAdmin, onRoleChange }) => (
     <>
         <tr className="hover:bg-slate-50 transition-colors cursor-pointer" onClick={onToggle}>
             <td className="px-6 py-4">
@@ -125,8 +142,21 @@ const InstructorRow = ({ inst, expanded, onToggle, urls, docCount }) => (
                 {inst.gender && <div className="text-xs text-slate-400">{inst.gender}</div>}
             </td>
             <td className="px-6 py-4 text-sm text-slate-600">{inst.email_primary}</td>
-            <td className="px-6 py-4">
-                {inst.instructor_role ? (
+            <td className="px-6 py-4" onClick={e => e.stopPropagation()}>
+                {isAdmin ? (
+                    <select
+                        value={inst.instructor_role || ''}
+                        onChange={e => onRoleChange(e.target.value)}
+                        className={`text-xs font-bold px-2.5 py-1.5 rounded-full border-0 outline-none cursor-pointer ${
+                            inst.instructor_role ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-50 text-slate-400'
+                        }`}
+                    >
+                        <option value="">未設定</option>
+                        {Object.entries(ROLE_LABELS).map(([k, v]) => (
+                            <option key={k} value={k}>{v}</option>
+                        ))}
+                    </select>
+                ) : inst.instructor_role ? (
                     <span className="inline-flex items-center text-xs font-bold bg-indigo-50 text-indigo-600 px-2.5 py-1 rounded-full">
                         {ROLE_LABELS[inst.instructor_role] || inst.instructor_role}
                     </span>

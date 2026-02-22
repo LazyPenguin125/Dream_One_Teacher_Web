@@ -1,9 +1,16 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabaseClient';
-import { Plus, Edit2, Trash2, Eye, EyeOff, LayoutGrid, Users, ClipboardCheck, UserCog, BarChart3, Megaphone, ChevronRight, ContactRound } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import {
+    Plus, Edit2, Trash2, Eye, EyeOff, LayoutGrid, Users,
+    ClipboardCheck, UserCog, BarChart3, Megaphone, ChevronRight,
+    ContactRound, BookOpen, GraduationCap, Settings, Shield
+} from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 const AdminDashboard = () => {
+    const { profile } = useAuth();
+    const isAdmin = profile?.role === 'admin';
     const [courses, setCourses] = useState([]);
     const [stats, setStats] = useState({ teachers: 0, courses: 0, assignments: 0 });
     const [loading, setLoading] = useState(true);
@@ -16,9 +23,8 @@ const AdminDashboard = () => {
                 .order('order', { ascending: true });
             setCourses(coursesData || []);
 
-            // Simulating some stats (in real app, use count queries)
             const { count: userCount } = await supabase.from('users').select('*', { count: 'exact', head: true });
-            const { count: assignCount } = await supabase.from('assignments').select('*', { count: 'exact', head: true });
+            const { count: assignCount } = await supabase.from('assignments').select('*', { count: 'exact', head: true }).is('feedback', null);
 
             setStats({
                 teachers: userCount || 0,
@@ -62,25 +68,22 @@ const AdminDashboard = () => {
 
     return (
         <div className="p-8">
-            <div className="flex items-center justify-between mb-8">
-                <div>
-                    <h1 className="text-3xl font-black text-slate-900">後台管理總覽</h1>
-                    <p className="text-slate-500 mt-1">管理您的培訓內容與監控進度</p>
-                </div>
-                <Link to="/admin/cms/new" className="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20">
-                    <Plus className="w-5 h-5" /> 建立新課程
-                </Link>
+            <div className="mb-8">
+                <h1 className="text-3xl font-black text-slate-900">後台管理總覽</h1>
+                <p className="text-slate-500 mt-1">
+                    {isAdmin ? '管理培訓內容、講師名單與系統設定' : '管理培訓內容與作業回饋'}
+                </p>
             </div>
 
             {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
                 <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4">
                     <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center">
                         <Users className="w-6 h-6" />
                     </div>
                     <div>
                         <div className="text-2xl font-black text-slate-900">{stats.teachers}</div>
-                        <div className="text-sm font-medium text-slate-400">總教師人數</div>
+                        <div className="text-sm font-medium text-slate-400">總人數</div>
                     </div>
                 </div>
                 <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4">
@@ -93,7 +96,7 @@ const AdminDashboard = () => {
                     </div>
                 </div>
                 <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4">
-                    <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center">
+                    <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center">
                         <ClipboardCheck className="w-6 h-6" />
                     </div>
                     <div>
@@ -103,59 +106,50 @@ const AdminDashboard = () => {
                 </div>
             </div>
 
-            {/* Quick nav */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-12">
-                <Link to="/admin/teachers" className="group bg-white p-5 rounded-2xl border border-slate-100 shadow-sm hover:border-blue-300 hover:shadow-md transition-all flex items-center gap-4">
-                    <div className="w-11 h-11 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                        <UserCog className="w-5 h-5" />
-                    </div>
-                    <div className="flex-1">
-                        <div className="font-bold text-slate-900">講師名單管理</div>
-                        <div className="text-xs text-slate-400">新增、管理講師與權限設定</div>
-                    </div>
-                    <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-blue-400 transition-colors" />
-                </Link>
-                <Link to="/admin/progress" className="group bg-white p-5 rounded-2xl border border-slate-100 shadow-sm hover:border-emerald-300 hover:shadow-md transition-all flex items-center gap-4">
-                    <div className="w-11 h-11 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center group-hover:bg-emerald-600 group-hover:text-white transition-colors">
-                        <BarChart3 className="w-5 h-5" />
-                    </div>
-                    <div className="flex-1">
-                        <div className="font-bold text-slate-900">培訓進度總覽</div>
-                        <div className="text-xs text-slate-400">檢視所有講師學習進度與狀態</div>
-                    </div>
-                    <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-emerald-400 transition-colors" />
-                </Link>
-                <Link to="/admin/announcements" className="group bg-white p-5 rounded-2xl border border-slate-100 shadow-sm hover:border-red-300 hover:shadow-md transition-all flex items-center gap-4">
-                    <div className="w-11 h-11 bg-red-50 text-red-500 rounded-xl flex items-center justify-center group-hover:bg-red-500 group-hover:text-white transition-colors">
-                        <Megaphone className="w-5 h-5" />
-                    </div>
-                    <div className="flex-1">
-                        <div className="font-bold text-slate-900">佈告欄管理</div>
-                        <div className="text-xs text-slate-400">新增、編輯首頁公告內容</div>
-                    </div>
-                    <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-red-400 transition-colors" />
-                </Link>
-                <Link to="/admin/instructors" className="group bg-white p-5 rounded-2xl border border-slate-100 shadow-sm hover:border-purple-300 hover:shadow-md transition-all flex items-center gap-4">
-                    <div className="w-11 h-11 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center group-hover:bg-purple-600 group-hover:text-white transition-colors">
-                        <ContactRound className="w-5 h-5" />
-                    </div>
-                    <div className="flex-1">
-                        <div className="font-bold text-slate-900">講師資料總覽</div>
-                        <div className="text-xs text-slate-400">查看所有講師個人資料與文件</div>
-                    </div>
-                    <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-purple-400 transition-colors" />
-                </Link>
+            {/* ── 培訓管理 ── */}
+            <div className="mb-10">
+                <div className="flex items-center gap-2 mb-4">
+                    <GraduationCap className="w-5 h-5 text-blue-600" />
+                    <h2 className="text-lg font-bold text-slate-900">培訓管理</h2>
+                    <span className="text-xs text-slate-400 ml-1">課程內容與作業回饋</span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <NavCard to="/admin/assignments" icon={ClipboardCheck} title="作業審核中心" desc="查看與回覆講師繳交的作業" color="amber" />
+                    <NavCard to="/admin/progress" icon={BarChart3} title="培訓進度總覽" desc="檢視所有講師學習進度與狀態" color="emerald" />
+                    <NavCard to="/admin/instructors" icon={ContactRound} title="講師資料總覽" desc="查看所有講師個人資料與文件" color="purple" />
+                </div>
             </div>
+
+            {/* ── 系統管理（僅管理員） ── */}
+            {isAdmin && (
+                <div className="mb-10">
+                    <div className="flex items-center gap-2 mb-4">
+                        <Shield className="w-5 h-5 text-indigo-600" />
+                        <h2 className="text-lg font-bold text-slate-900">系統管理</h2>
+                        <span className="text-xs text-slate-400 ml-1">僅管理員可見</span>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <NavCard to="/admin/teachers" icon={UserCog} title="講師名單管理" desc="新增、管理講師與權限設定" color="blue" />
+                        <NavCard to="/admin/announcements" icon={Megaphone} title="佈告欄管理" desc="新增、編輯首頁公告內容" color="red" />
+                    </div>
+                </div>
+            )}
 
             {/* Course List Table */}
             <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
-                <div className="p-6 border-b border-slate-100">
+                <div className="p-6 border-b border-slate-100 flex items-center justify-between">
                     <h2 className="font-bold text-slate-900 text-lg">課程列表</h2>
+                    {isAdmin && (
+                        <Link to="/admin/cms/new" className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20 text-sm">
+                            <Plus className="w-4 h-4" /> 建立新課程
+                        </Link>
+                    )}
                 </div>
                 <table className="w-full text-left">
                     <thead className="bg-slate-50 text-slate-400 text-xs font-bold uppercase tracking-wider">
                         <tr>
                             <th className="px-6 py-4">名稱</th>
+                            <th className="px-6 py-4">可見對象</th>
                             <th className="px-6 py-4">排序</th>
                             <th className="px-6 py-4">狀態</th>
                             <th className="px-6 py-4 text-right">操作</th>
@@ -167,6 +161,16 @@ const AdminDashboard = () => {
                                 <td className="px-6 py-4">
                                     <div className="font-semibold text-slate-900">{course.title}</div>
                                     <div className="text-xs text-slate-400 line-clamp-1">{course.description}</div>
+                                </td>
+                                <td className="px-6 py-4">
+                                    <span className={`text-xs font-bold px-2 py-1 rounded-full ${
+                                        course.visibility === 'intern' ? 'bg-teal-50 text-teal-600' :
+                                        course.visibility === 'formal' ? 'bg-violet-50 text-violet-600' :
+                                        'bg-slate-50 text-slate-400'
+                                    }`}>
+                                        {course.visibility === 'intern' ? '實習培訓' :
+                                         course.visibility === 'formal' ? '正式培訓' : '全部'}
+                                    </span>
                                 </td>
                                 <td className="px-6 py-4 text-slate-500 text-sm">{course.order}</td>
                                 <td className="px-6 py-4">
@@ -182,23 +186,27 @@ const AdminDashboard = () => {
                                 </td>
                                 <td className="px-6 py-4 text-right">
                                     <div className="flex items-center justify-end gap-2">
-                                        <button
-                                            onClick={() => toggleCourseStatus(course)}
-                                            className="p-2 text-slate-400 hover:text-blue-600 transition-colors"
-                                            title={course.is_published ? "下架" : "發佈"}
-                                        >
-                                            {course.is_published ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                                        </button>
+                                        {isAdmin && (
+                                            <button
+                                                onClick={() => toggleCourseStatus(course)}
+                                                className="p-2 text-slate-400 hover:text-blue-600 transition-colors"
+                                                title={course.is_published ? "下架" : "發佈"}
+                                            >
+                                                {course.is_published ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                            </button>
+                                        )}
                                         <Link to={`/admin/cms/${course.id}`} className="p-2 text-slate-400 hover:text-blue-600 transition-colors">
                                             <Edit2 className="w-4 h-4" />
                                         </Link>
-                                        <button
-                                            onClick={() => deleteCourse(course)}
-                                            className="p-2 text-slate-400 hover:text-red-500 transition-colors"
-                                            title="刪除課程"
-                                        >
-                                            <Trash2 className="w-4 h-4" />
-                                        </button>
+                                        {isAdmin && (
+                                            <button
+                                                onClick={() => deleteCourse(course)}
+                                                className="p-2 text-slate-400 hover:text-red-500 transition-colors"
+                                                title="刪除課程"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        )}
                                     </div>
                                 </td>
                             </tr>
@@ -207,6 +215,30 @@ const AdminDashboard = () => {
                 </table>
             </div>
         </div>
+    );
+};
+
+const NavCard = ({ to, icon: Icon, title, desc, color }) => {
+    const colorMap = {
+        blue: { bg: 'bg-blue-50', text: 'text-blue-600', hoverBg: 'group-hover:bg-blue-600', hoverBorder: 'hover:border-blue-300', hoverArrow: 'group-hover:text-blue-400' },
+        emerald: { bg: 'bg-emerald-50', text: 'text-emerald-600', hoverBg: 'group-hover:bg-emerald-600', hoverBorder: 'hover:border-emerald-300', hoverArrow: 'group-hover:text-emerald-400' },
+        red: { bg: 'bg-red-50', text: 'text-red-500', hoverBg: 'group-hover:bg-red-500', hoverBorder: 'hover:border-red-300', hoverArrow: 'group-hover:text-red-400' },
+        purple: { bg: 'bg-purple-50', text: 'text-purple-600', hoverBg: 'group-hover:bg-purple-600', hoverBorder: 'hover:border-purple-300', hoverArrow: 'group-hover:text-purple-400' },
+        amber: { bg: 'bg-amber-50', text: 'text-amber-600', hoverBg: 'group-hover:bg-amber-600', hoverBorder: 'hover:border-amber-300', hoverArrow: 'group-hover:text-amber-400' },
+    };
+    const c = colorMap[color] || colorMap.blue;
+
+    return (
+        <Link to={to} className={`group bg-white p-5 rounded-2xl border border-slate-100 shadow-sm ${c.hoverBorder} hover:shadow-md transition-all flex items-center gap-4`}>
+            <div className={`w-11 h-11 ${c.bg} ${c.text} rounded-xl flex items-center justify-center ${c.hoverBg} group-hover:text-white transition-colors`}>
+                <Icon className="w-5 h-5" />
+            </div>
+            <div className="flex-1">
+                <div className="font-bold text-slate-900">{title}</div>
+                <div className="text-xs text-slate-400">{desc}</div>
+            </div>
+            <ChevronRight className={`w-5 h-5 text-slate-300 ${c.hoverArrow} transition-colors`} />
+        </Link>
     );
 };
 

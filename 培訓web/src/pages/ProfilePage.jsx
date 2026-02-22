@@ -18,6 +18,8 @@ const ROLE_OPTIONS = [
     { value: 'A', label: 'A 級' },
     { value: 'B', label: 'B 級' },
     { value: '實習', label: '實習' },
+    { value: '職員', label: '職員' },
+    { value: '工讀生', label: '工讀生' },
 ];
 
 const DOC_TYPES = [
@@ -366,10 +368,19 @@ const ProfilePage = () => {
             <Section icon={GraduationCap} title="教學資訊">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <Field label="講師等級" required>
-                        <select value={form.instructor_role} onChange={e => handleChange('instructor_role', e.target.value)} className={selectCls}>
-                            <option value="">請選擇</option>
-                            {ROLE_OPTIONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-                        </select>
+                        {!isFirstTime && form.instructor_role ? (
+                            <div className="flex items-center gap-2">
+                                <span className="inline-flex items-center text-sm font-bold bg-purple-50 text-purple-600 px-4 py-2.5 rounded-xl">
+                                    {ROLE_OPTIONS.find(r => r.value === form.instructor_role)?.label || form.instructor_role}
+                                </span>
+                                <span className="text-xs text-slate-400">（如需變更請聯繫管理員）</span>
+                            </div>
+                        ) : (
+                            <select value={form.instructor_role} onChange={e => handleChange('instructor_role', e.target.value)} className={selectCls}>
+                                <option value="">請選擇</option>
+                                {ROLE_OPTIONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                            </select>
+                        )}
                     </Field>
                     <Field label="接課頻率（學期間）" required>
                         <input type="text" value={form.teaching_freq_semester} onChange={e => handleChange('teaching_freq_semester', e.target.value)} className={inputCls} placeholder="例：每週 2-3 次" />

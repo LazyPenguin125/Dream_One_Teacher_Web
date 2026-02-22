@@ -62,14 +62,31 @@ const AnnouncementManager = () => {
         }
 
         if (editing === 'new') {
-            const { error } = await supabase.from('announcements').insert({
+            const { data: inserted, error } = await supabase.from('announcements').insert({
                 title: form.title,
                 content: form.content,
                 tag: form.tag,
                 pinned: form.pinned,
                 published: form.published,
-            });
+            }).select('id').single();
             if (error) { alert('新增失敗：' + error.message); return; }
+
+            if (form.published && inserted) {
+                const { data: allUsers } = await supabase
+                    .from('users')
+                    .select('id')
+                    .neq('role', 'pending');
+                if (allUsers && allUsers.length > 0) {
+                    const notifs = allUsers.map(u => ({
+                        user_id: u.id,
+                        type: 'announcement',
+                        title: '新公告',
+                        body: form.title,
+                        link: `/announcements/${inserted.id}`,
+                    }));
+                    await supabase.from('notifications').insert(notifs);
+                }
+            }
         } else {
             const { error } = await supabase.from('announcements').update({
                 title: form.title,

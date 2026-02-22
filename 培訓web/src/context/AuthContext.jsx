@@ -6,6 +6,8 @@ const AuthContext = createContext({});
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [profile, setProfile] = useState(null);
+    const [instructorProfile, setInstructorProfile] = useState(null);
+    const [avatarUrl, setAvatarUrl] = useState(null);
     const [loading, setLoading] = useState(true);
     const profileFetchedRef = useRef(false);
 
@@ -25,6 +27,8 @@ export const AuthProvider = ({ children }) => {
                 }
             } else {
                 setProfile(null);
+                setInstructorProfile(null);
+                setAvatarUrl(null);
                 profileFetchedRef.current = false;
             }
             clearTimeout(timeoutId);
@@ -61,6 +65,26 @@ export const AuthProvider = ({ children }) => {
             if (data) {
                 console.log('Profile fetched:', data.role);
                 setProfile(data);
+                // Fetch instructor profile for display name & avatar
+                const { data: instrData } = await supabase
+                    .from('instructors')
+                    .select('full_name, nickname, photo_path')
+                    .eq('user_id', userId)
+                    .maybeSingle();
+                if (instrData) {
+                    setInstructorProfile(instrData);
+                    if (instrData.photo_path) {
+                        const { data: urlData } = await supabase.storage
+                            .from('instructor_uploads')
+                            .createSignedUrl(instrData.photo_path, 7200);
+                        setAvatarUrl(urlData?.signedUrl || null);
+                    } else {
+                        setAvatarUrl(null);
+                    }
+                } else {
+                    setInstructorProfile(null);
+                    setAvatarUrl(null);
+                }
             } else {
                 console.log('No profile row found, checking teacher_invites...');
                 const currentUser = (await supabase.auth.getUser()).data?.user;
@@ -158,7 +182,7 @@ export const AuthProvider = ({ children }) => {
     };
 
     return (
-        <AuthContext.Provider value={{ user, profile, signInWithGoogle, signUpWithEmail, signInWithEmail, signOut, refreshProfile: fetchProfile, loading }}>
+        <AuthContext.Provider value={{ user, profile, instructorProfile, avatarUrl, signInWithGoogle, signUpWithEmail, signInWithEmail, signOut, refreshProfile: fetchProfile, loading }}>
             {children}
         </AuthContext.Provider>
     );

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
-import { Save, ChevronLeft, Plus, Trash2, FileText, Video, Edit3 } from 'lucide-react';
+import { Save, ChevronLeft, Plus, Trash2, FileText, Video, Edit3, ClipboardCheck } from 'lucide-react';
 import EditorComponent from '../../components/EditorComponent';
 
 const CMSManager = () => {
@@ -153,6 +153,18 @@ const CMSManager = () => {
                                     className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none resize-none"
                                 />
                             </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">可見對象</label>
+                                <select
+                                    value={course.visibility || 'all'}
+                                    onChange={e => setCourse({ ...course, visibility: e.target.value })}
+                                    className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                                >
+                                    <option value="all">全部講師</option>
+                                    <option value="intern">實習培訓專用</option>
+                                    <option value="formal">正式培訓專用</option>
+                                </select>
+                            </div>
                             <div className="flex items-center gap-2 pt-2">
                                 <input
                                     type="checkbox"
@@ -184,35 +196,70 @@ const CMSManager = () => {
 
                         <div className="space-y-3">
                             {lessons.map((lesson, idx) => (
-                                <div key={lesson.id} className="flex items-center gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100 group hover:border-blue-200 transition-all">
-                                    <div className="text-sm font-black text-slate-300 w-6 flex-shrink-0">{(idx + 1).toString().padStart(2, '0')}</div>
-                                    <input
-                                        type="text"
-                                        value={lesson.title}
-                                        onChange={async (e) => {
-                                            const newTitle = e.target.value;
-                                            setLessons(lessons.map(l => l.id === lesson.id ? { ...l, title: newTitle } : l));
-                                        }}
-                                        onBlur={async () => {
-                                            await supabase.from('lessons').update({ title: lesson.title }).eq('id', lesson.id);
-                                        }}
-                                        className="flex-1 bg-transparent font-bold text-slate-700 outline-none focus:text-blue-600"
-                                        placeholder="輸入章節標題..."
-                                    />
-                                    <div className="flex items-center gap-2">
-                                        <button
-                                            onClick={() => setEditingLessonId(lesson.id)}
-                                            className="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 text-xs font-bold rounded-lg hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-all flex items-center gap-1"
-                                        >
-                                            <Edit3 className="w-3 h-3" /> 編輯內容
-                                        </button>
-                                        <button
-                                            onClick={() => deleteLesson(lesson)}
-                                            className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                                            title="刪除章節"
-                                        >
-                                            <Trash2 className="w-4 h-4" />
-                                        </button>
+                                <div key={lesson.id} className="bg-slate-50 p-4 rounded-xl border border-slate-100 group hover:border-blue-200 transition-all">
+                                    <div className="flex items-center gap-4">
+                                        <div className="text-sm font-black text-slate-300 w-6 flex-shrink-0">{(idx + 1).toString().padStart(2, '0')}</div>
+                                        <input
+                                            type="text"
+                                            value={lesson.title}
+                                            onChange={async (e) => {
+                                                const newTitle = e.target.value;
+                                                setLessons(lessons.map(l => l.id === lesson.id ? { ...l, title: newTitle } : l));
+                                            }}
+                                            onBlur={async () => {
+                                                await supabase.from('lessons').update({ title: lesson.title }).eq('id', lesson.id);
+                                            }}
+                                            className="flex-1 bg-transparent font-bold text-slate-700 outline-none focus:text-blue-600"
+                                            placeholder="輸入章節標題..."
+                                        />
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={() => setEditingLessonId(lesson.id)}
+                                                className="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 text-xs font-bold rounded-lg hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-all flex items-center gap-1"
+                                            >
+                                                <Edit3 className="w-3 h-3" /> 編輯內容
+                                            </button>
+                                            <button
+                                                onClick={() => deleteLesson(lesson)}
+                                                className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                                title="刪除章節"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                    {/* Assignment settings */}
+                                    <div className="mt-3 pt-3 border-t border-slate-200/60 flex items-center gap-4 pl-10">
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={!!lesson.requires_assignment}
+                                                onChange={async (e) => {
+                                                    const val = e.target.checked;
+                                                    setLessons(lessons.map(l => l.id === lesson.id ? { ...l, requires_assignment: val } : l));
+                                                    await supabase.from('lessons').update({ requires_assignment: val }).eq('id', lesson.id);
+                                                }}
+                                                className="w-3.5 h-3.5 rounded text-blue-600"
+                                            />
+                                            <span className="text-xs font-semibold text-slate-500 flex items-center gap-1">
+                                                <ClipboardCheck className="w-3 h-3" /> 需繳交作業
+                                            </span>
+                                        </label>
+                                        {lesson.requires_assignment && (
+                                            <select
+                                                value={lesson.assignment_for || 'all'}
+                                                onChange={async (e) => {
+                                                    const val = e.target.value;
+                                                    setLessons(lessons.map(l => l.id === lesson.id ? { ...l, assignment_for: val } : l));
+                                                    await supabase.from('lessons').update({ assignment_for: val }).eq('id', lesson.id);
+                                                }}
+                                                className="text-xs px-2 py-1 bg-white border border-slate-200 rounded-md focus:ring-1 focus:ring-blue-400 outline-none text-slate-600"
+                                            >
+                                                <option value="all">全部講師需繳</option>
+                                                <option value="intern">僅實習講師</option>
+                                                <option value="formal">僅正式講師</option>
+                                            </select>
+                                        )}
                                     </div>
                                 </div>
                             ))}

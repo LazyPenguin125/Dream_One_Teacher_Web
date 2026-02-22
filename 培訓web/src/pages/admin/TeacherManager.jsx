@@ -11,10 +11,11 @@ const DEFAULT_MENTORS = ['懶懶', '叮叮', '樹懶'];
 const ROLE_CONFIG = {
     pending: { label: '待審核' },
     teacher: { label: '講師' },
+    mentor: { label: '輔導員' },
     admin: { label: '管理員' },
 };
 
-const INSTRUCTOR_ROLE_LABELS = { S: 'S 級', 'A+': 'A+ 級', A: 'A 級', B: 'B 級', '實習': '實習' };
+const INSTRUCTOR_ROLE_LABELS = { S: 'S 級', 'A+': 'A+ 級', A: 'A 級', B: 'B 級', '實習': '實習', '職員': '職員', '工讀生': '工讀生' };
 
 const TeacherManager = () => {
     const [users, setUsers] = useState([]);
@@ -226,14 +227,17 @@ const TeacherManager = () => {
 
     const pendingUsers = users.filter(u => u.role === 'pending');
     const teacherUsers = users.filter(u => u.role === 'teacher');
+    const mentorUsers = users.filter(u => u.role === 'mentor');
     const adminUsers = users.filter(u => u.role === 'admin');
     const teacherInvites = invites.filter(i => i.role === 'teacher');
+    const mentorInvites = invites.filter(i => i.role === 'mentor');
     const adminInvites = invites.filter(i => i.role === 'admin');
 
     const getFilteredList = () => {
         let userList, inviteList;
         if (tab === 'pending') { userList = pendingUsers; inviteList = []; }
         else if (tab === 'teacher') { userList = teacherUsers; inviteList = teacherInvites; }
+        else if (tab === 'mentor') { userList = mentorUsers; inviteList = mentorInvites; }
         else { userList = adminUsers; inviteList = adminInvites; }
 
         const combined = [
@@ -249,7 +253,7 @@ const TeacherManager = () => {
     };
 
     const filteredList = getFilteredList();
-    const showMentorCol = tab === 'teacher';
+    const showMentorCol = tab === 'teacher' || tab === 'pending';
 
     if (loading) return <div className="p-12 text-center text-slate-500">載入中...</div>;
 
@@ -269,7 +273,7 @@ const TeacherManager = () => {
             </div>
 
             {/* Stats */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-8">
                 <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-3">
                     <div className="w-10 h-10 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center"><Clock className="w-5 h-5" /></div>
                     <div>
@@ -282,6 +286,13 @@ const TeacherManager = () => {
                     <div>
                         <div className="text-2xl font-black text-slate-900">{teacherUsers.length + teacherInvites.length}</div>
                         <div className="text-xs font-medium text-slate-400">講師</div>
+                    </div>
+                </div>
+                <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-3">
+                    <div className="w-10 h-10 bg-teal-50 text-teal-600 rounded-xl flex items-center justify-center"><ShieldCheck className="w-5 h-5" /></div>
+                    <div>
+                        <div className="text-2xl font-black text-slate-900">{mentorUsers.length + mentorInvites.length}</div>
+                        <div className="text-xs font-medium text-slate-400">輔導員</div>
                     </div>
                 </div>
                 <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-3">
@@ -315,6 +326,7 @@ const TeacherManager = () => {
                         <select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })}
                             className="px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500">
                             <option value="teacher">講師</option>
+                            <option value="mentor">輔導員</option>
                             <option value="admin">管理員</option>
                         </select>
                         <button onClick={handleDirectCreate} disabled={creating}
@@ -331,6 +343,7 @@ const TeacherManager = () => {
                     {[
                         { key: 'pending', label: '待審核', count: pendingUsers.length, activeColor: 'bg-amber-500' },
                         { key: 'teacher', label: '講師', count: teacherUsers.length + teacherInvites.length, activeColor: 'bg-blue-600' },
+                        { key: 'mentor', label: '輔導員', count: mentorUsers.length + mentorInvites.length, activeColor: 'bg-teal-600' },
                         { key: 'admin', label: '管理員', count: adminUsers.length + adminInvites.length, activeColor: 'bg-indigo-600' },
                     ].map(t => (
                         <button key={t.key} onClick={() => { setTab(t.key); setExpandedId(null); }}
@@ -407,28 +420,69 @@ const TeacherManager = () => {
                                                 <select value={item.role} onChange={e => handleRoleChange(item.id, e.target.value)}
                                                     className={`text-xs font-bold px-3 py-1.5 rounded-full border-0 outline-none cursor-pointer ${
                                                         item.role === 'admin' ? 'bg-indigo-50 text-indigo-600' :
+                                                        item.role === 'mentor' ? 'bg-teal-50 text-teal-600' :
                                                         item.role === 'pending' ? 'bg-amber-50 text-amber-600' :
                                                         'bg-blue-50 text-blue-600'
                                                     }`}>
                                                     {tab === 'pending' && <option value="pending">待審核</option>}
                                                     <option value="teacher">講師</option>
+                                                    <option value="mentor">輔導員</option>
                                                     <option value="admin">管理員</option>
                                                 </select>
                                             ) : (
                                                 <select value={item.role} onChange={e => handleInviteRoleChange(item.id, e.target.value)}
                                                     className={`text-xs font-bold px-3 py-1.5 rounded-full border-0 outline-none cursor-pointer ${
-                                                        item.role === 'admin' ? 'bg-indigo-50 text-indigo-600' : 'bg-blue-50 text-blue-600'
+                                                        item.role === 'admin' ? 'bg-indigo-50 text-indigo-600' :
+                                                        item.role === 'mentor' ? 'bg-teal-50 text-teal-600' :
+                                                        'bg-blue-50 text-blue-600'
                                                     }`}>
                                                     <option value="teacher">講師</option>
+                                                    <option value="mentor">輔導員</option>
                                                     <option value="admin">管理員</option>
                                                 </select>
                                             )}
                                         </td>
-                                        <td className="px-6 py-4">
-                                            {inst?.instructor_role ? (
-                                                <span className="inline-flex items-center text-xs font-bold bg-purple-50 text-purple-600 px-2.5 py-1 rounded-full">
-                                                    {INSTRUCTOR_ROLE_LABELS[inst.instructor_role] || inst.instructor_role}
-                                                </span>
+                                        <td className="px-6 py-4" onClick={e => e.stopPropagation()}>
+                                            {item._type === 'user' ? (
+                                                <select
+                                                    value={inst?.instructor_role || ''}
+                                                    onChange={async (e) => {
+                                                        const newRole = e.target.value || null;
+                                                        let error;
+                                                        if (inst) {
+                                                            ({ error } = await supabase
+                                                                .from('instructors')
+                                                                .update({ instructor_role: newRole })
+                                                                .eq('user_id', item.id));
+                                                        } else {
+                                                            ({ error } = await supabase
+                                                                .from('instructors')
+                                                                .upsert({
+                                                                    user_id: item.id,
+                                                                    full_name: item.name || '',
+                                                                    email_primary: item.email || '',
+                                                                    instructor_role: newRole,
+                                                                    teaching_regions: [],
+                                                                }, { onConflict: 'user_id' }));
+                                                        }
+                                                        if (error) {
+                                                            alert('講師等級變更失敗：' + error.message);
+                                                            return;
+                                                        }
+                                                        setInstructorMap(prev => ({
+                                                            ...prev,
+                                                            [item.id]: { ...(prev[item.id] || {}), user_id: item.id, instructor_role: newRole }
+                                                        }));
+                                                    }}
+                                                    className={`text-xs font-bold px-2.5 py-1.5 rounded-full border-0 outline-none cursor-pointer ${
+                                                        inst?.instructor_role ? 'bg-purple-50 text-purple-600' : 'bg-slate-50 text-slate-400'
+                                                    }`}
+                                                >
+                                                    <option value="">未設定</option>
+                                                    {Object.entries(INSTRUCTOR_ROLE_LABELS).map(([k, v]) => (
+                                                        <option key={k} value={k}>{v}</option>
+                                                    ))}
+                                                </select>
                                             ) : (
                                                 <span className="text-xs text-slate-300">—</span>
                                             )}
@@ -532,7 +586,8 @@ const TeacherManager = () => {
                         {filteredList.length === 0 && (
                             <tr><td colSpan={showMentorCol ? 7 : 6} className="px-6 py-12 text-center text-slate-400">
                                 {tab === 'pending' ? '目前沒有待審核的使用者' :
-                                 tab === 'teacher' ? '目前沒有講師' : '目前沒有管理員'}
+                                 tab === 'teacher' ? '目前沒有講師' :
+                                 tab === 'mentor' ? '目前沒有輔導員' : '目前沒有管理員'}
                             </td></tr>
                         )}
                     </tbody>
