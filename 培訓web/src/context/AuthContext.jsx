@@ -1,7 +1,24 @@
-import { createContext, useContext, useEffect, useState, useRef } from 'react';
+import { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
 const AuthContext = createContext({});
+
+// 用原生 fetch 查 PostgREST，完全繞開 Supabase SDK 的 AbortController
+async function rawQuery(table, params, accessToken) {
+    const qs = new URLSearchParams(params).toString();
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${qs}`, {
+        headers: {
+            apikey: SUPABASE_KEY,
+            Authorization: `Bearer ${accessToken || SUPABASE_KEY}`,
+            Accept: 'application/json',
+        },
+    });
+    if (!res.ok) return null;
+    return res.json();
+}
 
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
@@ -9,225 +26,183 @@ export const AuthProvider = ({ children }) => {
     const [instructorProfile, setInstructorProfile] = useState(null);
     const [avatarUrl, setAvatarUrl] = useState(null);
     const [loading, setLoading] = useState(true);
-    const profileFetchedRef = useRef(false);
+    const fetchingRef = useRef(false);
 
-    useEffect(() => {
-        let isMounted = true;
-        let debounceTimer = null;
+    const fetchProfile = useCallback(async (authUser) => {
+        if (!authUser?.id) { setLoading(false); return; }
+        if (fetchingRef.current) return;
+        fetchingRef.current = true;
 
-        // 用 debounce 防止 INITIAL_SESSION + SIGNED_IN 同時觸發造成 AbortError
-        const scheduleFetch = (userId) => {
-            if (debounceTimer) clearTimeout(debounceTimer);
-            debounceTimer = setTimeout(() => {
-                if (isMounted) fetchProfile(userId);
-            }, 250);
-        };
-
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-            if (!isMounted) return;
-            console.log('Auth event:', _event, session?.user?.id);
-
-            if (_event === 'INITIAL_SESSION' || _event === 'SIGNED_IN') {
-                if (session?.user) {
-                    setUser(session.user);
-                    scheduleFetch(session.user.id);
-                } else if (_event === 'INITIAL_SESSION') {
-                    // 沒有 session，直接解除 loading
-                    setLoading(false);
-                }
-            } else if (_event === 'SIGNED_OUT') {
-                if (debounceTimer) clearTimeout(debounceTimer);
-                setUser(null);
-                setProfile(null);
-                setInstructorProfile(null);
-                setAvatarUrl(null);
-                profileFetchedRef.current = false;
-                setLoading(false);
-            } else if (_event === 'TOKEN_REFRESHED' && session?.user) {
-                setUser(session.user);
-            }
-        });
-
-        return () => {
-            isMounted = false;
-            if (debounceTimer) clearTimeout(debounceTimer);
-            subscription.unsubscribe();
-        };
-    }, []);
-
-
-    const fetchProfile = async (userId, retryCount = 0) => {
-        if (!userId) {
-            setLoading(false);
-            return;
-        }
-        let shouldRetry = false;
         try {
-            // 短暫延遲讓 Supabase session 穩定
-            await new Promise(r => setTimeout(r, retryCount === 0 ? 300 : 800 * retryCount));
-            const { data, error } = await supabase
-                .from('users')
-                .select('*')
-                .eq('id', userId)
-                .maybeSingle();
+            const token = (await supabase.auth.getSession()).data?.session?.access_token;
 
-            if (error) {
-                const isAbortError = error.message?.toLowerCase().includes('abort') || error.message?.toLowerCase().includes('signal');
-                if (isAbortError && retryCount < 3) {
-                    console.warn(`Profile fetch aborted, retrying (${retryCount + 1}/3)...`);
-                    shouldRetry = true;
-                    return;
-                }
-                console.warn('Profile fetch error:', error.message);
-                return;
-            }
+            // 1. 查 public.users（用原生 fetch，不被 Supabase abort）
+            const rows = await rawQuery('users', {
+                select: '*',
+                id: `eq.${authUser.id}`,
+            }, token);
 
-            if (data) {
-                // 如果現有 role 是 pending，檢查是否有 teacher_invites 可以升級
-                if (data.role === 'pending') {
-                    const { data: invite } = await supabase
-                        .from('teacher_invites')
-                        .select('role')
-                        .eq('email', data.email)
-                        .maybeSingle();
-                    if (invite && invite.role && invite.role !== 'pending') {
-                        await supabase.from('users').update({ role: invite.role }).eq('id', userId);
-                        await supabase.from('teacher_invites').delete().eq('email', data.email);
-                        data = { ...data, role: invite.role };
-                        console.log('Role upgraded from invite:', invite.role);
+            let profileData = rows?.[0] || null;
+
+            if (profileData) {
+                // 如果 role 還是 pending，檢查 teacher_invites 升級
+                if (profileData.role === 'pending') {
+                    const invites = await rawQuery('teacher_invites', {
+                        select: 'role',
+                        email: `eq.${profileData.email}`,
+                    }, token);
+                    const invite = invites?.[0];
+                    if (invite?.role && invite.role !== 'pending') {
+                        await supabase.from('users').update({ role: invite.role }).eq('id', authUser.id);
+                        await supabase.from('teacher_invites').delete().eq('email', profileData.email);
+                        profileData = { ...profileData, role: invite.role };
                     }
                 }
-                console.log('Profile fetched:', data.role);
-                setProfile(data);
-                // Fetch instructor profile for display name & avatar
-                const { data: instrData } = await supabase
-                    .from('instructors')
-                    .select('full_name, nickname, photo_path')
-                    .eq('user_id', userId)
-                    .maybeSingle();
-                if (instrData) {
-                    setInstructorProfile(instrData);
-                    if (instrData.photo_path) {
-                        const { data: urlData } = await supabase.storage
-                            .from('instructor_uploads')
-                            .createSignedUrl(instrData.photo_path, 7200);
-                        setAvatarUrl(urlData?.signedUrl || null);
-                    } else {
-                        setAvatarUrl(null);
-                    }
-                } else {
-                    setInstructorProfile(null);
-                    setAvatarUrl(null);
-                }
+                setProfile(profileData);
             } else {
-                console.log('No profile row found, checking teacher_invites...');
-                const currentUser = (await supabase.auth.getUser()).data?.user;
-                const email = currentUser?.email;
-
+                // 沒有 profile，嘗試從 teacher_invites 建立
+                const email = authUser.email;
                 if (email) {
-                    const { data: invite } = await supabase
-                        .from('teacher_invites')
-                        .select('*')
-                        .eq('email', email)
-                        .maybeSingle();
+                    const invites = await rawQuery('teacher_invites', {
+                        select: '*',
+                        email: `eq.${email}`,
+                    }, token);
+                    const invite = invites?.[0];
 
                     if (invite) {
                         const { error: insertErr } = await supabase.from('users').insert({
-                            id: userId,
-                            name: invite.name || currentUser.user_metadata?.full_name,
+                            id: authUser.id,
+                            name: invite.name || authUser.user_metadata?.full_name,
                             email,
                             role: invite.role,
                         });
                         if (!insertErr) {
                             await supabase.from('teacher_invites').delete().eq('email', email);
-                            console.log('Profile created from invite:', invite.role);
-                            setProfile({ id: userId, name: invite.name, email, role: invite.role });
+                            setProfile({ id: authUser.id, name: invite.name, email, role: invite.role });
                             return;
                         }
                     }
                 }
 
-                console.log('No invite found, creating pending user entry...');
+                // 建立 pending 用戶
                 const { error: createErr } = await supabase.from('users').insert({
-                    id: userId,
-                    name: currentUser?.user_metadata?.full_name || null,
-                    email: email || currentUser?.email,
+                    id: authUser.id,
+                    name: authUser.user_metadata?.full_name || null,
+                    email: authUser.email,
                     role: 'pending',
                 });
                 if (createErr && !createErr.message?.includes('duplicate')) {
                     console.warn('Failed to create user entry:', createErr.message);
                 }
-                setProfile({ id: userId, email, role: 'pending' });
+                setProfile({ id: authUser.id, email: authUser.email, role: 'pending' });
+            }
+
+            // 2. 查 instructors（顯示名稱、頭貼）
+            const instrRows = await rawQuery('instructors', {
+                select: 'full_name,nickname,photo_path',
+                user_id: `eq.${authUser.id}`,
+            }, token);
+            const instrData = instrRows?.[0] || null;
+
+            if (instrData) {
+                setInstructorProfile(instrData);
+                if (instrData.photo_path) {
+                    const { data: urlData } = await supabase.storage
+                        .from('instructor_uploads')
+                        .createSignedUrl(instrData.photo_path, 7200);
+                    setAvatarUrl(urlData?.signedUrl || null);
+                } else {
+                    setAvatarUrl(null);
+                }
+            } else {
+                setInstructorProfile(null);
+                setAvatarUrl(null);
             }
         } catch (err) {
-            const isAbortErr = err?.name === 'AbortError' || err?.message?.toLowerCase().includes('abort');
-            if (isAbortErr && retryCount < 3) {
-                console.warn(`Profile fetch caught AbortError, retrying (${retryCount + 1}/3)...`);
-                shouldRetry = true;
+            console.error('fetchProfile error:', err);
+        } finally {
+            fetchingRef.current = false;
+            setLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        let isMounted = true;
+
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+            if (!isMounted) return;
+
+            if (_event === 'SIGNED_OUT') {
+                setUser(null);
+                setProfile(null);
+                setInstructorProfile(null);
+                setAvatarUrl(null);
+                setLoading(false);
                 return;
             }
-            console.error('Fetch error:', err);
-        } finally {
-            if (shouldRetry) {
-                // 延遲後重試，維持 loading=true 狀態
-                setTimeout(() => fetchProfile(userId, retryCount + 1), 800);
-            } else {
+
+            if (_event === 'TOKEN_REFRESHED' && session?.user) {
+                setUser(session.user);
+                return;
+            }
+
+            // INITIAL_SESSION / SIGNED_IN：只設 user，profile 交給下面的 useEffect
+            if (session?.user) {
+                setUser(session.user);
+            } else if (_event === 'INITIAL_SESSION') {
                 setLoading(false);
             }
+        });
+
+        return () => { isMounted = false; subscription.unsubscribe(); };
+    }, []);
+
+    // 獨立的 useEffect：user 有值時才去查 profile（脫離 onAuthStateChange 的生命週期）
+    useEffect(() => {
+        if (user && !profile && !fetchingRef.current) {
+            fetchProfile(user);
         }
-    };
+    }, [user, profile, fetchProfile]);
 
     const signInWithGoogle = async () => {
         const { error } = await supabase.auth.signInWithOAuth({
             provider: 'google',
-            options: {
-                redirectTo: window.location.origin
-            }
+            options: { redirectTo: window.location.origin },
         });
         if (error) throw error;
     };
 
     const signUpWithEmail = async (email, password, name) => {
         const { data, error } = await supabase.auth.signUp({
-            email,
-            password,
-            options: {
-                data: {
-                    full_name: name
-                }
-            }
+            email, password,
+            options: { data: { full_name: name } },
         });
         if (error) throw error;
         return data;
     };
 
     const signInWithEmail = async (email, password) => {
-        const { error } = await supabase.auth.signInWithPassword({
-            email,
-            password
-        });
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
     };
 
     const signOut = async () => {
-        console.log('Attempting to sign out...');
         try {
-            const { error } = await supabase.auth.signOut();
-            if (error) {
-                console.error('Logout error:', error.message);
-            } else {
-                console.log('Logout successful');
-                // Force a reload as a fallback to ensure state is clean
-                window.location.href = '/';
-            }
+            await supabase.auth.signOut();
+            window.location.href = '/';
         } catch (err) {
-            console.error('Unexpected logout error:', err);
+            console.error('Logout error:', err);
             window.location.href = '/';
         }
     };
 
     return (
-        <AuthContext.Provider value={{ user, profile, instructorProfile, avatarUrl, signInWithGoogle, signUpWithEmail, signInWithEmail, signOut, refreshProfile: fetchProfile, loading }}>
+        <AuthContext.Provider value={{
+            user, profile, instructorProfile, avatarUrl,
+            signInWithGoogle, signUpWithEmail, signInWithEmail, signOut,
+            refreshProfile: () => { fetchingRef.current = false; return fetchProfile(user); },
+            loading,
+        }}>
             {children}
         </AuthContext.Provider>
     );
