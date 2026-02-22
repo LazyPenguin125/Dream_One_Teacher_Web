@@ -15,7 +15,7 @@ export const AuthProvider = ({ children }) => {
         const timeoutId = setTimeout(() => {
             console.warn('Auth loading timeout — forcing loading=false');
             setLoading(false);
-        }, 6000);
+        }, 15000);
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
             console.log('Auth event:', _event, session?.user?.id);

@@ -21,7 +21,9 @@ const ProtectedRoute = ({ children, adminOnly = false, staffOnly = false, allowP
 
   if (loading) return <div className="p-12 text-center text-slate-500 text-lg">載入中...</div>;
   if (!user) return <Navigate to="/" />;
-  if (!allowPending && (!profile || profile.role === 'pending')) return <Navigate to="/pending" />;
+  // 有登入的 user 但 profile 還沒載完（網路慢），繼續等待而非跳轉
+  if (user && !profile) return <div className="p-12 text-center text-slate-500 text-lg">載入中...</div>;
+  if (!allowPending && profile.role === 'pending') return <Navigate to="/pending" />;
   if (adminOnly && profile?.role !== 'admin') return <Navigate to="/" />;
   if (staffOnly && profile?.role !== 'admin' && profile?.role !== 'mentor') return <Navigate to="/" />;
 
