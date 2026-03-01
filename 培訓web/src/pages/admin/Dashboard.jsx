@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import {
     Plus, Edit2, Trash2, Eye, EyeOff, LayoutGrid, Users,
     ClipboardCheck, UserCog, BarChart3, Megaphone, ChevronRight,
-    ContactRound, BookOpen, GraduationCap, Settings, Shield
+    ContactRound, BookOpen, GraduationCap, Settings, Shield, FileSignature
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -131,6 +131,7 @@ const AdminDashboard = () => {
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         <NavCard to="/admin/teachers" icon={UserCog} title="講師名單管理" desc="新增、管理講師與權限設定" color="blue" />
                         <NavCard to="/admin/announcements" icon={Megaphone} title="佈告欄管理" desc="新增、編輯首頁公告內容" color="red" />
+                        <NavCard to="/admin/contracts" icon={FileSignature} title="合約文件管理" desc="管理合約文件與查看簽約狀態" color="violet" />
                     </div>
                 </div>
             )}

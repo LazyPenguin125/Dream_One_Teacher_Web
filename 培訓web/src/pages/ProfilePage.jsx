@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabaseClient';
-import { Save, Upload, X, User, Phone, GraduationCap, FileText, CreditCard, Camera, Landmark, Pencil, PartyPopper } from 'lucide-react';
+import { Save, Upload, X, User, Phone, GraduationCap, FileText, CreditCard, Camera, Landmark, Pencil, PartyPopper, FileSignature, CheckCircle2, Download, Eye, Calendar, Clock } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 const TW_REGIONS = {
     '北部': ['臺北市', '新北市', '基隆市', '桃園市', '新竹市', '新竹縣', '宜蘭縣'],
@@ -68,10 +69,38 @@ const ProfilePage = () => {
     const [filePreviews, setFilePreviews] = useState({});
     const [uploading, setUploading] = useState({});
     const fileRefs = useRef({});
+    const [contractInfo, setContractInfo] = useState(null);
+    const [latestDocVersions, setLatestDocVersions] = useState(null);
 
     useEffect(() => {
-        if (user) loadProfile();
+        if (user) {
+            loadProfile();
+            loadContractStatus();
+        }
     }, [user]);
+
+    const loadContractStatus = async () => {
+        try {
+            const { data: contractData } = await supabase
+                .from('instructor_contracts')
+                .select('*')
+                .eq('user_id', user.id)
+                .eq('status', 'signed')
+                .order('signed_at', { ascending: false })
+                .limit(1);
+            if (contractData?.length) setContractInfo(contractData[0]);
+
+            const { data: docsData } = await supabase
+                .from('contract_documents')
+                .select('doc_type, version')
+                .eq('is_active', true);
+            if (docsData?.length) {
+                const versions = {};
+                docsData.forEach(d => { versions[d.doc_type] = d.version; });
+                setLatestDocVersions(versions);
+            }
+        } catch (e) { /* ignore */ }
+    };
 
     const loadProfile = async () => {
         const { data } = await supabase
@@ -514,6 +543,75 @@ const ProfilePage = () => {
                     {saving ? '儲存中⋯' : isFirstTime ? '送出資料' : '儲存個人資料'}
                 </button>
             </div>
+
+            {/* ── 簽約狀態 ── */}
+            {!isFirstTime && (
+                <Section icon={FileSignature} title="合約簽署">
+                    {contractInfo ? (
+                        <div>
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="w-10 h-10 bg-green-50 rounded-xl flex items-center justify-center">
+                                    <CheckCircle2 className="w-5 h-5 text-green-500" />
+                                </div>
+                                <div>
+                                    <div className="font-bold text-green-700 text-sm">已簽約</div>
+                                    <div className="text-xs text-slate-400">
+                                        {new Date(contractInfo.signed_at).toLocaleDateString('zh-TW')} 簽署
+                                    </div>
+                                </div>
+                            </div>
+
+                            {latestDocVersions && (() => {
+                                const signedVersions = contractInfo.doc_versions || {
+                                    rules: contractInfo.rules_doc_version,
+                                    compensation: contractInfo.compensation_doc_version,
+                                    contract: contractInfo.contract_doc_version,
+                                };
+                                const hasUpdate = Object.entries(latestDocVersions).some(
+                                    ([k, v]) => (signedVersions[k] || 0) < v
+                                );
+                                return hasUpdate;
+                            })() && (
+                                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4 flex items-start gap-2">
+                                    <Clock className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
+                                    <p className="text-sm text-amber-700">
+                                        合約文件已更新為新版本，建議您<Link to="/contract" className="font-bold text-blue-600 hover:underline">重新簽約</Link>以確認最新內容。
+                                    </p>
+                                </div>
+                            )}
+
+                            <div className="flex flex-col sm:flex-row gap-3">
+                                <Link
+                                    to={`/contract/view/${contractInfo.id}`}
+                                    className="flex items-center justify-center gap-2 px-5 py-2.5 bg-slate-100 text-slate-700 rounded-xl font-bold text-sm hover:bg-slate-200 transition-all"
+                                >
+                                    <Eye className="w-4 h-4" /> 查看合約
+                                </Link>
+                                <Link
+                                    to="/contract"
+                                    className="flex items-center justify-center gap-2 px-5 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-50 transition-all"
+                                >
+                                    <FileSignature className="w-4 h-4" /> 重新簽約
+                                </Link>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="text-center py-6">
+                            <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <FileSignature className="w-8 h-8 text-blue-500" />
+                            </div>
+                            <h3 className="font-bold text-slate-900 mb-1">尚未簽約</h3>
+                            <p className="text-sm text-slate-500 mb-5">請完成線上合約簽署程序</p>
+                            <Link
+                                to="/contract"
+                                className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-bold text-sm hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg shadow-blue-500/25 hover:shadow-xl hover:-translate-y-0.5"
+                            >
+                                <FileSignature className="w-4 h-4" /> 前往簽約
+                            </Link>
+                        </div>
+                    )}
+                </Section>
+            )}
 
             {/* ── 註冊完成彈窗 ── */}
             {showSuccess && (

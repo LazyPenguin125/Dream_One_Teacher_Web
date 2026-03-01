@@ -15,6 +15,9 @@ import AnnouncementManager from './pages/admin/AnnouncementManager';
 import AnnouncementDetail from './pages/AnnouncementDetail';
 import ProfilePage from './pages/ProfilePage';
 import InstructorList from './pages/admin/InstructorList';
+import ContractSigningFlow from './pages/ContractSigningFlow';
+import ContractView from './pages/ContractView';
+import ContractAdmin from './pages/admin/ContractAdmin';
 
 const ProtectedRoute = ({ children, adminOnly = false, staffOnly = false, allowPending = false }) => {
   const { user, profile, loading } = useAuth();
@@ -124,6 +127,30 @@ function App() {
             element={
               <ProtectedRoute staffOnly={true}>
                 <Layout><InstructorList /></Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/contract"
+            element={
+              <ProtectedRoute>
+                <Layout><ContractSigningFlow /></Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/contract/view/:contractId"
+            element={
+              <ProtectedRoute>
+                <Layout><ContractView /></Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/contracts"
+            element={
+              <ProtectedRoute adminOnly={true}>
+                <Layout><ContractAdmin /></Layout>
               </ProtectedRoute>
             }
           />

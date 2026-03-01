@@ -25,13 +25,21 @@ END $$;
 CREATE TABLE IF NOT EXISTS public.notifications (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id uuid REFERENCES auth.users NOT NULL,
-  type text NOT NULL CHECK (type IN ('announcement', 'feedback', 'like')),
+  type text NOT NULL CHECK (type IN ('announcement', 'feedback', 'like', 'contract')),
   title text NOT NULL,
   body text,
   link text,
   is_read boolean DEFAULT false NOT NULL,
   created_at timestamptz DEFAULT now() NOT NULL
 );
+
+-- 若表已存在，更新 type 的 CHECK 約束以包含 'contract'
+DO $$ BEGIN
+  ALTER TABLE public.notifications DROP CONSTRAINT IF EXISTS notifications_type_check;
+  ALTER TABLE public.notifications ADD CONSTRAINT notifications_type_check
+    CHECK (type IN ('announcement', 'feedback', 'like', 'contract'));
+EXCEPTION WHEN undefined_object THEN NULL;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON public.notifications(user_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON public.notifications(created_at DESC);

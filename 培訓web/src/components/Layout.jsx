@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabaseClient';
-import { LogIn, LogOut, BookOpen, LayoutDashboard, UserCircle, Bell, Check, CheckCheck, Megaphone, Star, ThumbsUp, Menu, X } from 'lucide-react';
+import { LogIn, LogOut, BookOpen, LayoutDashboard, UserCircle, Bell, Check, CheckCheck, Megaphone, Star, ThumbsUp, Menu, X, FileSignature } from 'lucide-react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 
 const ROLE_LABELS = { admin: '管理員', mentor: '輔導員', teacher: '講師', pending: '待審核' };
@@ -35,6 +35,36 @@ const Layout = ({ children }) => {
             }
         }
     }, [loading, user, profile, navigate, location.pathname]);
+
+    // 每次登入檢查是否尚未簽約，未簽約則發送提醒通知
+    useEffect(() => {
+        if (loading || !user || !profile || profile.role === 'pending') return;
+        const key = `contract_reminder_${user.id}`;
+        if (sessionStorage.getItem(key)) return;
+        sessionStorage.setItem(key, '1');
+
+        (async () => {
+            try {
+                const { data } = await supabase
+                    .from('instructor_contracts')
+                    .select('id')
+                    .eq('user_id', user.id)
+                    .eq('status', 'signed')
+                    .limit(1);
+                if (data && data.length > 0) return;
+
+                await supabase.from('notifications').insert({
+                    user_id: user.id,
+                    type: 'contract',
+                    title: '尚未完成合約簽署',
+                    body: '請盡快前往簽署合約，完成後才算正式生效。',
+                    link: '/contract',
+                });
+            } catch (err) {
+                console.error('Contract reminder check failed:', err);
+            }
+        })();
+    }, [loading, user, profile]);
 
     // 路由切換時關閉手機選單
     useEffect(() => { setMobileMenuOpen(false); }, [location.pathname]);
@@ -223,11 +253,13 @@ const NOTIF_ICONS = {
     announcement: Megaphone,
     feedback: Star,
     like: ThumbsUp,
+    contract: FileSignature,
 };
 const NOTIF_COLORS = {
     announcement: 'text-red-500 bg-red-50',
     feedback: 'text-amber-500 bg-amber-50',
     like: 'text-blue-500 bg-blue-50',
+    contract: 'text-emerald-600 bg-emerald-50',
 };
 
 const NotificationBell = ({ userId }) => {
